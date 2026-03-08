@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Face Recognition & Adversarial Makeup</title>
+    <script defer src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api/dist/face-api.js"></script>
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background-color: #121212;
+            color: #ffffff;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+        header {
+            padding: 15px 20px;
+            background-color: #1e1e1e;
+            border-bottom: 1px solid #333;
+            text-align: center;
+        }
+        header h1 { margin: 0; font-size: 1.5rem; }
+        header p { margin: 5px 0 0; font-size: 0.9rem; color: #aaaaaa; }
+        
+        .container {
+            display: flex;
+            flex: 1;
+            height: calc(100vh - 70px);
+        }
+        
+        .col-comandi, .col-makeup {
+            width: 16.666%; /* 1/6 */
+            background-color: #252525;
+            padding: 20px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .col-comandi { border-right: 1px solid #333; }
+        .col-makeup { border-left: 1px solid #333; }
+        
+        .col-immagine {
+            width: 66.666%; /* 4/6 */
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            background-color: #000;
+        }
+        
+        .media-container {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+        }
+
+        video, canvas, img.makeup-demo {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        img.makeup-demo {
+            display: none;
+            z-index: 10;
+        }
+
+        canvas {
+            z-index: 5;
+            pointer-events: none;
+        }
+
+        .log-box {
+            height: 60px;
+            background-color: #1e1e1e;
+            color: #00ff00;
+            font-family: monospace;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-top: 1px solid #333;
+            font-size: 1.1rem;
+            padding: 0 10px;
+            text-align: center;
+        }
+
+        button {
+            padding: 12px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: bold;
+            transition: 0.2s;
+        }
+        button:hover { background-color: #45a049; }
+        button:active { transform: scale(0.98); }
+
+        .makeup-btn { background-color: #9c27b0; }
+        .makeup-btn:hover { background-color: #8e24aa; }
+        
+        .section-title {
+            text-transform: uppercase;
+            font-size: 0.85rem;
+            color: #888;
+            margin-bottom: 5px;
+            border-bottom: 1px solid #444;
+            padding-bottom: 5px;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>Adversarial Face Evasion Demo</h1>
+        <p>Sistema di scansione biometrica e simulazione difese di AI (Adv-Makeup, ART Evasion)</p>
+    </header>
+
+    <div class="container">
+        <div class="col-comandi">
+            <div class="section-title">Comandi Biometrici</div>
+            <button onclick="scansionaFaccia()">Scansiona faccia</button>
+            <button onclick="salvaFaccia()">Salva faccia</button>
+            <button onclick="trovaFaccia()">Trova faccia</button>
+        </div>
+
+        <div class="col-immagine">
+            <div class="media-container" id="media-container">
+                <video id="webcam" autoplay muted playsinline></video>
+                <img id="makeup-img" class="makeup-demo" alt="Makeup Demo">
+            </div>
+            <div class="log-box" id="log-message">Inizializzazione sistema in corso...</div>
+        </div>
+
+        <div class="col-makeup">
+            <div class="section-title">Tecniche di Evasione (ART/Paper)</div>
+            <button class="makeup-btn" onclick="toggleMakeup('Adv-Makeup')">Adv-Makeup (Eye Shadow)</button>
+            <button class="makeup-btn" onclick="toggleMakeup('Adversarial Patch')">Adversarial Patch</button>
+            <button class="makeup-btn" onclick="toggleMakeup('DPatch')">DPatch (Object Masking)</button>
+        </div>
+    </div>
+
+    <script>
+        const video = document.getElementById('webcam');
+        const logBox = document.getElementById('log-message');
+        const makeupImg = document.getElementById('makeup-img');
+        const mediaContainer = document.getElementById('media-container');
+        
+        let modelsLoaded = false;
+        let savedFaces = [];
+        let faceCounter = 0;
+        let activeCanvas = null;
+
+        // Recupero impronte
+        if (localStorage.getItem('biometric_faces')) {
+            try {
+                const data = JSON.parse(localStorage.getItem('biometric_faces'));
+                savedFaces = data.map(arr => new Float32Array(arr));
+                faceCounter = savedFaces.length;
+            } catch(e) {
+                console.error("Errore nel parser storage.");
+            }
+        }
+
+        function writeLog(msg) {
+            logBox.innerText = msg;
+        }
+
+        async function initSystem() {
+            writeLog("Caricamento modelli IA neurali...");
+            // URL dei modelli puntato sulla CDN del pacchetto npm di Vlad Mandic
+            const MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/';
+            
+            try {
+                // Inizializza il backend di TensorFlow.js
+                await faceapi.tf.setBackend('webgl');
+                await faceapi.tf.ready();
+
+                await Promise.all([
+                    faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL),
+                    faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+                    faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
+                    faceapi.nets.ageGenderNet.loadFromUri(MODEL_URL)
+                ]);
+                modelsLoaded = true;
+                writeLog("Modelli caricati. Richiesta accesso webcam...");
+
+                const stream = await navigator.mediaDevices.getUserMedia({ video: {} });
+                video.srcObject = stream;
+                
+                video.onloadedmetadata = () => {
+                    writeLog(`Sistema pronto. Database locale: ${faceCounter} volti salvati.`);
+                };
+            } catch (err) {
+                writeLog("Errore: Impossibile caricare i modelli o la webcam.");
+                console.error(err);
+            }
+        }
+
+        window.addEventListener('load', initSystem);
+
+        function clearCanvas() {
+            if (activeCanvas) {
+                activeCanvas.remove();
+                activeCanvas = null;
+            }
+        }
+
+        async function scansionaFaccia() {
+            if (!modelsLoaded) return writeLog("Errore: Modelli non pronti.");
+            if (makeupImg.style.display === 'block') return writeLog("Azione bloccata: tecnica di evasione attiva.");
+            
+            writeLog("Scansione in corso...");
+            clearCanvas();
+
+            const detections = await faceapi.detectAllFaces(video).withFaceLandmarks().withAgeAndGender().withFaceDescriptors();
+            
+            if (detections.length === 0) {
+                writeLog("Nessun volto rilevato.");
+                return;
+            }
+
+            activeCanvas = faceapi.createCanvasFromMedia(video);
+            mediaContainer.appendChild(activeCanvas);
+            
+            const displaySize = { width: video.videoWidth, height: video.videoHeight };
+            faceapi.matchDimensions(activeCanvas, displaySize);
+            
+            const resizedDetections = faceapi.resizeResults(detections, displaySize);
+            
+            faceapi.draw.drawDetections(activeCanvas, resizedDetections);
+            faceapi.draw.drawFaceLandmarks(activeCanvas, resizedDetections);
+
+            const firstFace = detections[0];
+            const age = Math.round(firstFace.age);
+            const gender = firstFace.gender === 'male' ? 'Uomo' : 'Donna';
+            
+            writeLog(`Trovati ${detections.length} volti. Ipotesi: ${gender}, circa ${age} anni.`);
+        }
+
+        async function salvaFaccia() {
+            if (!modelsLoaded) return writeLog("Errore: Modelli non pronti.");
+            writeLog("Acquisizione impronta biometrica...");
+            clearCanvas();
+
+            const detection = await faceapi.detectSingleFace(video).withFaceLandmarks().withFaceDescriptor();
+            
+            if (!detection) {
+                writeLog("Impossibile salvare: nessun volto inquadrato in modo chiaro.");
+                return;
+            }
+            
+            savedFaces.push(detection.descriptor);
+            
+            const arrToSave = savedFaces.map(desc => Array.from(desc));
+            localStorage.setItem('biometric_faces', JSON.stringify(arrToSave));
+            
+            writeLog(`Volto salvato. Numero impronta: ${faceCounter}`);
+            faceCounter++;
+        }
+
+        async function trovaFaccia() {
+            if (!modelsLoaded) return writeLog("Errore: Modelli non pronti.");
+            if (savedFaces.length === 0) return writeLog("Database vuoto. Nessun volto salvato.");
+            
+            writeLog("Matching biometrico in corso...");
+            clearCanvas();
+
+            const detections = await faceapi.detectAllFaces(video).withFaceLandmarks().withFaceDescriptors();
+            
+            if (detections.length === 0) {
+                writeLog("Nessun volto inquadrato da cercare.");
+                return;
+            }
+
+            const labeledDescriptors = savedFaces.map((desc, idx) => new faceapi.LabeledFaceDescriptors(idx.toString(), [desc]));
+            const faceMatcher = new faceapi.FaceMatcher(labeledDescriptors, 0.55);
+
+            let matchedIds = [];
+            detections.forEach(fd => {
+                const bestMatch = faceMatcher.findBestMatch(fd.descriptor);
+                if (bestMatch.label !== 'unknown') {
+                    matchedIds.push(bestMatch.label);
+                }
+            });
+
+            if (matchedIds.length > 0) {
+                writeLog(`Riconoscimento positivo. Corrisponde alle impronte: ${matchedIds.join(', ')}`);
+            } else {
+                writeLog("Volto inquadrato sconosciuto. Nessuna corrispondenza.");
+            }
+        }
+
+        let activeMakeup = null;
+
+        function toggleMakeup(technique) {
+            clearCanvas();
+            if (activeMakeup === technique) {
+                makeupImg.style.display = 'none';
+                video.style.opacity = '1';
+                activeMakeup = null;
+                writeLog("Evasione disattivata. Feed webcam ripristinato.");
+            } else {
+                activeMakeup = technique;
+                
+                let bgColor = "333333";
+                let fgColor = "ffffff";
+                
+                if(technique === 'Adv-Makeup') bgColor = "6a1b9a";
+                if(technique === 'Adversarial Patch') bgColor = "e65100";
+                if(technique === 'DPatch') bgColor = "00695c";
+
+                const mockText = encodeURIComponent(`[SIMULAZIONE]\n${technique}\nApplicata al video`);
+                makeupImg.src = `https://via.placeholder.com/800x600/${bgColor}/${fgColor}?text=${mockText}`;
+                
+                makeupImg.style.display = 'block';
+                video.style.opacity = '0';
+                writeLog(`Tecnica applicata: ${technique}. Il riconoscimento facciale fallirebbe.`);
+            }
+        }
+    </script>
+</body>
+</html>

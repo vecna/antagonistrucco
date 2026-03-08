@@ -1,0 +1,822 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Adversarial Makeup — Face Recognition Lab</title>
+<script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api/dist/face-api.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#0d0d0d;--panel:#151518;--border:#2a2a30;--accent:#7c5cfc;
+  --accent2:#e84393;--text:#e0e0e0;--dim:#777;--log-bg:#1a1a20;
+  --green:#00e676;--red:#ff5252;--yellow:#ffd740;
+}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;overflow:hidden;height:100vh;display:flex;flex-direction:column}
+header{background:linear-gradient(135deg,#1a1028 0%,#0d0d0d 100%);padding:14px 28px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+header h1{font-size:1.3rem;font-weight:700;background:linear-gradient(90deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+header .about{font-size:.72rem;color:var(--dim);max-width:520px;text-align:right;line-height:1.4}
+header .about strong{color:var(--accent);-webkit-text-fill-color:initial}
+main{display:grid;grid-template-columns:1fr 4fr 1fr;flex:1;overflow:hidden}
+.panel{background:var(--panel);border-right:1px solid var(--border);padding:14px 10px;display:flex;flex-direction:column;gap:10px;overflow-y:auto}
+.panel:last-child{border-right:none;border-left:1px solid var(--border)}
+.panel h2{font-size:.75rem;text-transform:uppercase;letter-spacing:.12em;color:var(--dim);margin-bottom:4px}
+.btn{
+  background:linear-gradient(135deg,#23232a,#1a1a22);border:1px solid var(--border);
+  color:var(--text);padding:10px 8px;border-radius:8px;cursor:pointer;font-size:.78rem;
+  transition:all .2s;text-align:left;line-height:1.35
+}
+.btn:hover{border-color:var(--accent);background:linear-gradient(135deg,#2a2640,#1a1a22)}
+.btn:active{transform:scale(.97)}
+.btn.active{border-color:var(--accent2);box-shadow:0 0 12px rgba(232,67,147,.2)}
+.btn .label{font-weight:600;display:block;margin-bottom:2px}
+.btn .desc{font-size:.67rem;color:var(--dim);display:block}
+.center{display:flex;flex-direction:column;position:relative;background:#000}
+.video-wrap{flex:1;position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center}
+#webcam{position:absolute;height:100%;object-fit:cover}
+#overlay{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none}
+#makeup-display{position:absolute;top:0;left:0;width:100%;height:100%;display:none;z-index:10;background:#000}
+#makeup-canvas{width:100%;height:100%;object-fit:contain}
+.log-bar{
+  height:42px;min-height:42px;background:var(--log-bg);border-top:1px solid var(--border);
+  display:flex;align-items:center;padding:0 16px;font-size:.76rem;font-family:'Courier New',monospace;
+  color:var(--green);overflow:hidden;white-space:nowrap;text-overflow:ellipsis
+}
+.log-bar .ts{color:var(--dim);margin-right:10px;font-size:.68rem}
+.log-bar.warn{color:var(--yellow)}
+.log-bar.err{color:var(--red)}
+.status-dot{width:8px;height:8px;border-radius:50%;background:var(--red);margin-right:10px;flex-shrink:0;transition:background .3s}
+.status-dot.ready{background:var(--green)}
+.status-dot.loading{background:var(--yellow);animation:pulse 1s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.separator{border:none;border-top:1px solid var(--border);margin:4px 0}
+.counter{font-size:.68rem;color:var(--dim);text-align:center;padding:4px}
+/* Makeup info panel shown on technique images */
+.makeup-info{
+  position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,.82);
+  padding:12px 16px;z-index:11;display:none
+}
+.makeup-info h3{font-size:.85rem;color:var(--accent2);margin-bottom:4px}
+.makeup-info p{font-size:.72rem;color:var(--dim);line-height:1.45}
+.makeup-info .ref{font-size:.64rem;color:var(--accent);margin-top:6px;font-style:italic}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>&#x1f3ad; Adversarial Makeup — Face Recognition Lab</h1>
+  <div class="about">
+    Interactive demo exploring <strong>adversarial attacks on face recognition</strong> systems.
+    Based on research including Adv-Makeup (Yin et al., IJCAI 2021), Adv-Glasses (Sharif et al., CCS 2016),
+    CV Dazzle (Harvey, 2010), ART (Nicolae et al., 2018). Powered by <strong>@vladmandic/face-api</strong> (TF.js 3.x).
+  </div>
+</header>
+
+<main>
+  <!-- LEFT: Commands -->
+  <div class="panel" id="cmd-panel">
+    <h2>&#x2699; Comandi</h2>
+
+    <button class="btn" id="btn-scan" disabled>
+      <span class="label">&#x1f50d; Scansiona Faccia</span>
+      <span class="desc">Rileva volto e mostra landmark biometrici in sovraimpressione</span>
+    </button>
+
+    <button class="btn" id="btn-save" disabled>
+      <span class="label">&#x1f4be; Salva Faccia</span>
+      <span class="desc">Salva l'impronta biometrica (descriptor 128-d) nel database locale</span>
+    </button>
+
+    <button class="btn" id="btn-find" disabled>
+      <span class="label">&#x1f50e; Trova Faccia</span>
+      <span class="desc">Cerca corrispondenze nel database delle facce salvate</span>
+    </button>
+
+    <hr class="separator">
+    <div class="counter" id="db-counter">Database: 0 facce salvate</div>
+    <button class="btn" id="btn-clear" style="font-size:.68rem;text-align:center;color:var(--dim)">
+      <span class="label" style="font-size:.68rem">&#x1f5d1; Svuota Database</span>
+    </button>
+  </div>
+
+  <!-- CENTER: Video -->
+  <div class="center">
+    <div class="video-wrap" id="video-wrap">
+      <video id="webcam" autoplay muted playsinline></video>
+      <canvas id="overlay"></canvas>
+      <div id="makeup-display">
+        <canvas id="makeup-canvas"></canvas>
+        <div class="makeup-info" id="makeup-info">
+          <h3 id="mi-title"></h3>
+          <p id="mi-desc"></p>
+          <div class="ref" id="mi-ref"></div>
+        </div>
+      </div>
+    </div>
+    <div class="log-bar" id="log-bar">
+      <div class="status-dot" id="status-dot"></div>
+      <span class="ts" id="log-ts"></span>
+      <span id="log-msg">Inizializzazione...</span>
+    </div>
+  </div>
+
+  <!-- RIGHT: Makeup Techniques -->
+  <div class="panel" id="makeup-panel">
+    <h2>&#x1f484; Adv-Makeup</h2>
+
+    <button class="btn mk-btn" data-tech="adv-makeup">
+      <span class="label">Adv-Makeup</span>
+      <span class="desc">Eye shadow GAN sull'area orbitale</span>
+    </button>
+
+    <button class="btn mk-btn" data-tech="adv-glasses">
+      <span class="label">Adv-Glasses</span>
+      <span class="desc">Montatura occhiali con pattern adversarial</span>
+    </button>
+
+    <button class="btn mk-btn" data-tech="adv-hat">
+      <span class="label">Adv-Hat</span>
+      <span class="desc">Pattern perturbativo sulla tesa del cappello</span>
+    </button>
+
+    <button class="btn mk-btn" data-tech="cv-dazzle">
+      <span class="label">CV Dazzle</span>
+      <span class="desc">Makeup geometrico asimmetrico anti-sorveglianza</span>
+    </button>
+
+    <button class="btn mk-btn" data-tech="light-proj">
+      <span class="label">Light Projection</span>
+      <span class="desc">Pattern luminosi proiettati sul volto</span>
+    </button>
+
+    <button class="btn mk-btn" data-tech="subtle-keypoint">
+      <span class="label">Subtle Keypoint</span>
+      <span class="desc">Ombreggiatura minima su nosebridge e keypoint</span>
+    </button>
+  </div>
+</main>
+
+<script>
+// ============================================================
+//  STATE
+// ============================================================
+const MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/';
+let modelsLoaded = false;
+let scanning = false;
+let scanInterval = null;
+let faceDB = [];  // {id, descriptor, timestamp, info}
+let nextId = 0;
+let activeTech = null;
+
+const video  = document.getElementById('webcam');
+const overlay = document.getElementById('overlay');
+const wrap    = document.getElementById('video-wrap');
+const logMsg  = document.getElementById('log-msg');
+const logTs   = document.getElementById('log-ts');
+const logBar  = document.getElementById('log-bar');
+const dot     = document.getElementById('status-dot');
+const dbCount = document.getElementById('db-counter');
+const mkDisp  = document.getElementById('makeup-display');
+const mkCanvas= document.getElementById('makeup-canvas');
+const mkInfo  = document.getElementById('makeup-info');
+
+// ============================================================
+//  LOG
+// ============================================================
+function log(msg, level='ok') {
+  const now = new Date();
+  logTs.textContent = now.toLocaleTimeString();
+  logMsg.textContent = msg;
+  logBar.className = 'log-bar' + (level==='warn'?' warn':'') + (level==='err'?' err':'');
+}
+
+// ============================================================
+//  INIT
+// ============================================================
+async function init() {
+  dot.className = 'status-dot loading';
+  log('Caricamento modelli @vladmandic/face-api...','warn');
+  try {
+    await Promise.all([
+      faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL),
+      faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+      faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
+      faceapi.nets.ageGenderNet.loadFromUri(MODEL_URL)
+    ]);
+    modelsLoaded = true;
+    log('Modelli caricati. Avvio webcam...');
+  } catch(e) {
+    log('Errore caricamento modelli: ' + e.message, 'err');
+    return;
+  }
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({video:{width:{ideal:1280},height:{ideal:720},facingMode:'user'}});
+    video.srcObject = stream;
+    await video.play();
+    resizeOverlay();
+    window.addEventListener('resize', resizeOverlay);
+    dot.className = 'status-dot ready';
+    log('Webcam attiva. Sistema pronto.');
+    document.getElementById('btn-scan').disabled = false;
+    document.getElementById('btn-save').disabled = false;
+    document.getElementById('btn-find').disabled = false;
+  } catch(e) {
+    log('Errore webcam: ' + e.message, 'err');
+  }
+}
+
+function resizeOverlay() {
+  const r = wrap.getBoundingClientRect();
+  overlay.width = r.width;
+  overlay.height = r.height;
+  // size the video to cover
+  const vr = video.videoWidth / video.videoHeight;
+  const cr = r.width / r.height;
+  if (vr > cr) {
+    video.style.width = 'auto';
+    video.style.height = '100%';
+  } else {
+    video.style.width = '100%';
+    video.style.height = 'auto';
+  }
+}
+
+// ============================================================
+//  FACE DETECTION HELPERS
+// ============================================================
+function getDisplayScale() {
+  const r = wrap.getBoundingClientRect();
+  const vw = video.videoWidth, vh = video.videoHeight;
+  if (!vw || !vh) return {sx:1,sy:1,ox:0,oy:0};
+  const vr = vw/vh, cr = r.width/r.height;
+  let dw, dh;
+  if (vr > cr) { dh = r.height; dw = dh * vr; }
+  else { dw = r.width; dh = dw / vr; }
+  return { sx: dw/vw, sy: dh/vh, ox: (r.width - dw)/2, oy: (r.height - dh)/2 };
+}
+
+function drawLandmarks(ctx, det) {
+  const s = getDisplayScale();
+  ctx.save();
+  ctx.translate(s.ox, s.oy);
+  ctx.scale(s.sx, s.sy);
+
+  // bounding box
+  const b = det.detection.box;
+  ctx.strokeStyle = '#7c5cfc';
+  ctx.lineWidth = 2 / s.sx;
+  ctx.strokeRect(b.x, b.y, b.width, b.height);
+
+  // landmarks
+  if (det.landmarks) {
+    const pts = det.landmarks.positions;
+    ctx.fillStyle = '#00e676';
+    for (const p of pts) {
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 2/s.sx, 0, Math.PI*2);
+      ctx.fill();
+    }
+    // connect jawline
+    ctx.strokeStyle = 'rgba(0,230,118,.4)';
+    ctx.lineWidth = 1/s.sx;
+    const jaw = det.landmarks.getJawOutline();
+    ctx.beginPath();
+    jaw.forEach((p,i) => i===0 ? ctx.moveTo(p.x,p.y) : ctx.lineTo(p.x,p.y));
+    ctx.stroke();
+    // connect eyes
+    for (const eye of [det.landmarks.getLeftEye(), det.landmarks.getRightEye()]) {
+      ctx.strokeStyle = 'rgba(124,92,252,.6)';
+      ctx.beginPath();
+      eye.forEach((p,i) => i===0 ? ctx.moveTo(p.x,p.y) : ctx.lineTo(p.x,p.y));
+      ctx.closePath(); ctx.stroke();
+    }
+    // nose
+    const nose = det.landmarks.getNose();
+    ctx.strokeStyle = 'rgba(232,67,147,.5)';
+    ctx.beginPath();
+    nose.forEach((p,i) => i===0 ? ctx.moveTo(p.x,p.y) : ctx.lineTo(p.x,p.y));
+    ctx.stroke();
+    // mouth
+    const mouth = det.landmarks.getMouth();
+    ctx.strokeStyle = 'rgba(255,215,64,.5)';
+    ctx.beginPath();
+    mouth.forEach((p,i) => i===0 ? ctx.moveTo(p.x,p.y) : ctx.lineTo(p.x,p.y));
+    ctx.closePath(); ctx.stroke();
+    // eyebrows
+    for (const eb of [det.landmarks.getLeftEyeBrow(), det.landmarks.getRightEyeBrow()]) {
+      ctx.strokeStyle = 'rgba(0,176,255,.5)';
+      ctx.beginPath();
+      eb.forEach((p,i) => i===0 ? ctx.moveTo(p.x,p.y) : ctx.lineTo(p.x,p.y));
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
+}
+
+// ============================================================
+//  COMMANDS
+// ============================================================
+
+// SCAN
+document.getElementById('btn-scan').addEventListener('click', () => {
+  if (activeTech) closeTech();
+  if (scanning) { stopScan(); return; }
+  scanning = true;
+  document.getElementById('btn-scan').classList.add('active');
+  log('Scansione continua attivata...');
+  scanLoop();
+  scanInterval = setInterval(scanLoop, 500);
+});
+
+function stopScan() {
+  scanning = false;
+  clearInterval(scanInterval);
+  const ctx = overlay.getContext('2d');
+  ctx.clearRect(0,0,overlay.width,overlay.height);
+  document.getElementById('btn-scan').classList.remove('active');
+  log('Scansione fermata.');
+}
+
+async function scanLoop() {
+  if (!modelsLoaded || !scanning) return;
+  const det = await faceapi.detectSingleFace(video)
+    .withFaceLandmarks()
+    .withFaceDescriptor()
+    .withAgeAndGender();
+  const ctx = overlay.getContext('2d');
+  ctx.clearRect(0,0,overlay.width,overlay.height);
+  if (det) {
+    drawLandmarks(ctx, det);
+    const g = det.gender === 'male' ? 'Maschio' : 'Femmina';
+    const age = Math.round(det.age);
+    const conf = (det.genderProbability*100).toFixed(0);
+    log(`Volto rilevato — Età stimata: ${age}, Genere: ${g} (${conf}%)`);
+  } else {
+    log('Nessun volto rilevato.', 'warn');
+  }
+}
+
+// SAVE
+document.getElementById('btn-save').addEventListener('click', async () => {
+  if (activeTech) closeTech();
+  log('Acquisizione impronta biometrica...');
+  const det = await faceapi.detectSingleFace(video)
+    .withFaceLandmarks()
+    .withFaceDescriptor()
+    .withAgeAndGender();
+  if (!det) { log('Nessun volto trovato per il salvataggio.', 'err'); return; }
+  const id = nextId++;
+  const g = det.gender === 'male' ? 'M' : 'F';
+  const age = Math.round(det.age);
+  faceDB.push({ id, descriptor: det.descriptor, timestamp: Date.now(), info: `${g}, ~${age}y` });
+  dbCount.textContent = `Database: ${faceDB.length} facce salvate`;
+  log(`Faccia #${id} salvata (${g}, ~${age} anni) — descriptor 128-d archiviato.`);
+});
+
+// FIND
+document.getElementById('btn-find').addEventListener('click', async () => {
+  if (activeTech) closeTech();
+  if (faceDB.length === 0) { log('Database vuoto. Salva almeno una faccia.', 'warn'); return; }
+  log('Ricerca corrispondenza...');
+  const det = await faceapi.detectSingleFace(video)
+    .withFaceLandmarks()
+    .withFaceDescriptor();
+  if (!det) { log('Nessun volto rilevato per la ricerca.', 'err'); return; }
+
+  const threshold = 0.6;
+  const matches = [];
+  for (const entry of faceDB) {
+    const dist = faceapi.euclideanDistance(det.descriptor, entry.descriptor);
+    if (dist < threshold) matches.push({ id: entry.id, dist, info: entry.info });
+  }
+  if (matches.length > 0) {
+    matches.sort((a,b) => a.dist - b.dist);
+    const ids = matches.map(m => `#${m.id} (${m.info}, dist=${m.dist.toFixed(3)})`).join(', ');
+    log(`Corrispondenze trovate: ${ids}`);
+  } else {
+    log('Nessuna corrispondenza trovata nel database (soglia: ' + threshold + ').', 'warn');
+  }
+});
+
+// CLEAR DB
+document.getElementById('btn-clear').addEventListener('click', () => {
+  faceDB = []; nextId = 0;
+  dbCount.textContent = 'Database: 0 facce salvate';
+  log('Database svuotato.');
+});
+
+// ============================================================
+//  MAKEUP TECHNIQUE ILLUSTRATIONS
+// ============================================================
+const techniques = {
+  'adv-makeup': {
+    title: 'Adv-Makeup — Eye Shadow Attack',
+    desc: 'Genera ombretto sintetico tramite GAN sull\'area orbitale del volto. Il makeup è visivamente naturale ma contiene perturbazioni adversariali ottimizzate con meta-learning per ingannare modelli di riconoscimento facciale in scenari black-box. L\'attacco modifica solo la regione attorno agli occhi (~6% dei pixel).',
+    ref: 'Yin et al., "Adv-Makeup: A New Imperceptible and Transferable Attack on Face Recognition", IJCAI 2021',
+    draw: drawAdvMakeup
+  },
+  'adv-glasses': {
+    title: 'Adv-Glasses — Adversarial Eyeglasses',
+    desc: 'Montature di occhiali stampate con pattern di colori ottimizzati tramite gradient descent. I colori sono calibrati per spostare il feature vector del volto nello spazio embedding, causando dodging o impersonation. Efficace sia in digitale che fisicamente con stampa su carta glossy.',
+    ref: 'Sharif et al., "Accessorize to a Crime: Real and Stealthy Attacks on State-of-the-Art Face Recognition", CCS 2016',
+    draw: drawAdvGlasses
+  },
+  'adv-hat': {
+    title: 'Adv-Hat — Adversarial Hat Pattern',
+    desc: 'Pattern adversariale stampato sulla tesa di un cappello. Utilizza trasformazioni affini e simulazioni multi-angolo per mantenere efficacia sotto variazioni di posa. Riduce significativamente gli score di similarità d\'identità nei sistemi ArcFace.',
+    ref: 'Komkov & Petiushko, "AdvHat: Real-world Adversarial Attack on ArcFace Face ID System", 2019',
+    draw: drawAdvHat
+  },
+  'cv-dazzle': {
+    title: 'CV Dazzle — Anti-Surveillance Makeup',
+    desc: 'Makeup geometrico ad alto contrasto ispirato al camouflage navale WWI. Rompe la simmetria facciale e oscura il ponte nasale per impedire la face detection (Viola-Jones e CNN). Usa pattern cubisti, colori contrastanti con la pelle, e asimmetria deliberata.',
+    ref: 'Adam Harvey, "CV Dazzle", 2010 — NYU ITP Masters Thesis',
+    draw: drawCvDazzle
+  },
+  'light-proj': {
+    title: 'Light Projection Attack',
+    desc: 'Pattern di luce digitale proiettati sul volto dell\'avversario tramite un proiettore. Il pattern è ottimizzato per l\'attacco di impersonation/dodging e viene generato in tempo reale usando la webcam. Non richiede artefatti fisici indossabili.',
+    ref: 'Nguyen et al., "Adversarial Light Projection Attacks on Face Recognition Systems", 2020',
+    draw: drawLightProj
+  },
+  'subtle-keypoint': {
+    title: 'Subtle Keypoint Darkening',
+    desc: 'Ombreggiatura minima applicata su regioni ad alta densità di keypoint: sopracciglia, ponte nasale e contorno mandibolare. A differenza di CV Dazzle, è discreto e non teatrale, ma sufficiente a perturbare i classificatori Haar cascade e MTCNN.',
+    ref: 'Noever & McKee, "Novel AI Camera Camouflage: Face Cloaking Without Full Disguise", PeopleTec 2025',
+    draw: drawSubtleKeypoint
+  }
+};
+
+// Handle makeup button clicks
+document.querySelectorAll('.mk-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const tech = btn.dataset.tech;
+    if (activeTech === tech) { closeTech(); return; }
+    closeTech();
+    activeTech = tech;
+    btn.classList.add('active');
+    showTech(tech);
+  });
+});
+
+function closeTech() {
+  if (!activeTech) return;
+  mkDisp.style.display = 'none';
+  mkInfo.style.display = 'none';
+  document.querySelectorAll('.mk-btn').forEach(b => b.classList.remove('active'));
+  activeTech = null;
+  log('Visualizzazione tecnica chiusa. Webcam attiva.');
+}
+
+function showTech(tech) {
+  const t = techniques[tech];
+  const r = wrap.getBoundingClientRect();
+  mkCanvas.width = r.width;
+  mkCanvas.height = r.height;
+  const ctx = mkCanvas.getContext('2d');
+  ctx.clearRect(0,0,mkCanvas.width,mkCanvas.height);
+  t.draw(ctx, mkCanvas.width, mkCanvas.height);
+  mkDisp.style.display = 'block';
+  mkInfo.style.display = 'block';
+  document.getElementById('mi-title').textContent = t.title;
+  document.getElementById('mi-desc').textContent = t.desc;
+  document.getElementById('mi-ref').textContent = t.ref;
+  log(`Tecnica: ${t.title}`);
+}
+
+// --- DRAWING FUNCTIONS ---
+
+function drawFaceOutline(ctx, cx, cy, s) {
+  // generic face shape
+  ctx.save();
+  ctx.strokeStyle = '#444';
+  ctx.lineWidth = 2;
+  // head oval
+  ctx.beginPath();
+  ctx.ellipse(cx, cy, s*0.38, s*0.48, 0, 0, Math.PI*2);
+  ctx.stroke();
+  // eyes
+  ctx.strokeStyle = '#555';
+  ctx.lineWidth = 1.5;
+  const ey = cy - s*0.08;
+  for (const ex of [cx - s*0.13, cx + s*0.13]) {
+    ctx.beginPath();
+    ctx.ellipse(ex, ey, s*0.065, s*0.03, 0, 0, Math.PI*2);
+    ctx.stroke();
+    // pupil
+    ctx.fillStyle = '#555';
+    ctx.beginPath();
+    ctx.arc(ex, ey, s*0.015, 0, Math.PI*2);
+    ctx.fill();
+  }
+  // eyebrows
+  ctx.strokeStyle = '#555';
+  ctx.lineWidth = 2.5;
+  for (const side of [-1, 1]) {
+    ctx.beginPath();
+    const bx = cx + side * s*0.13;
+    ctx.moveTo(bx - side*s*0.08, ey - s*0.06);
+    ctx.quadraticCurveTo(bx, ey - s*0.09, bx + side*s*0.08, ey - s*0.055);
+    ctx.stroke();
+  }
+  // nose
+  ctx.strokeStyle = '#444';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - s*0.02);
+  ctx.lineTo(cx - s*0.04, cy + s*0.1);
+  ctx.lineTo(cx + s*0.04, cy + s*0.1);
+  ctx.stroke();
+  // mouth
+  ctx.beginPath();
+  ctx.moveTo(cx - s*0.08, cy + s*0.2);
+  ctx.quadraticCurveTo(cx, cy + s*0.25, cx + s*0.08, cy + s*0.2);
+  ctx.stroke();
+  ctx.restore();
+  return { ey, s };
+}
+
+function drawAdvMakeup(ctx, w, h) {
+  ctx.fillStyle = '#0a0a0a'; ctx.fillRect(0,0,w,h);
+  const cx = w/2, cy = h/2, s = Math.min(w,h)*0.7;
+  drawFaceOutline(ctx, cx, cy, s);
+  // eye shadow regions
+  const ey = cy - s*0.08;
+  for (const side of [-1, 1]) {
+    const ex = cx + side * s*0.13;
+    const grad = ctx.createRadialGradient(ex, ey, s*0.01, ex, ey-s*0.02, s*0.12);
+    grad.addColorStop(0, 'rgba(160,80,180,0.7)');
+    grad.addColorStop(0.4, 'rgba(120,50,150,0.5)');
+    grad.addColorStop(0.7, 'rgba(80,30,100,0.3)');
+    grad.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.ellipse(ex, ey - s*0.015, s*0.1, s*0.06, side*0.15, 0, Math.PI*2);
+    ctx.fill();
+    // subtle noise pattern
+    ctx.globalAlpha = 0.3;
+    for (let i = 0; i < 40; i++) {
+      const px = ex + (Math.random()-0.5)*s*0.16;
+      const py = ey + (Math.random()-0.5)*s*0.08 - s*0.015;
+      ctx.fillStyle = `hsl(${280+Math.random()*40},${50+Math.random()*30}%,${30+Math.random()*30}%)`;
+      ctx.fillRect(px, py, 2, 2);
+    }
+    ctx.globalAlpha = 1;
+  }
+  // label
+  ctx.fillStyle = 'rgba(124,92,252,0.15)';
+  ctx.fillRect(0,0,w,30);
+  ctx.fillStyle = '#7c5cfc';
+  ctx.font = '13px monospace';
+  ctx.fillText('ADV-MAKEUP — GAN-generated orbital eye shadow perturbation', 12, 20);
+}
+
+function drawAdvGlasses(ctx, w, h) {
+  ctx.fillStyle = '#0a0a0a'; ctx.fillRect(0,0,w,h);
+  const cx = w/2, cy = h/2, s = Math.min(w,h)*0.7;
+  drawFaceOutline(ctx, cx, cy, s);
+  const ey = cy - s*0.08;
+  // glasses frame with adversarial pattern
+  ctx.lineWidth = s*0.025;
+  for (const side of [-1, 1]) {
+    const ex = cx + side * s*0.13;
+    // frame
+    ctx.strokeStyle = '#222';
+    ctx.beginPath();
+    ctx.ellipse(ex, ey, s*0.1, s*0.055, 0, 0, Math.PI*2);
+    ctx.stroke();
+    // adversarial color bands on frame
+    const numBands = 12;
+    for (let i = 0; i < numBands; i++) {
+      const a = (i / numBands) * Math.PI * 2;
+      const a2 = ((i+1) / numBands) * Math.PI * 2;
+      const colors = ['#ff2255','#22ff88','#2255ff','#ffaa00','#ff00ff','#00ffff',
+                       '#ff4400','#44ff00','#0044ff','#ffff00','#ff0088','#8800ff'];
+      ctx.strokeStyle = colors[i];
+      ctx.lineWidth = s*0.022;
+      ctx.beginPath();
+      ctx.ellipse(ex, ey, s*0.1, s*0.055, 0, a, a2);
+      ctx.stroke();
+    }
+  }
+  // bridge
+  ctx.strokeStyle = '#ff4400';
+  ctx.lineWidth = s*0.018;
+  ctx.beginPath();
+  ctx.moveTo(cx - s*0.03, ey);
+  ctx.quadraticCurveTo(cx, ey - s*0.02, cx + s*0.03, ey);
+  ctx.stroke();
+  // temples
+  for (const side of [-1, 1]) {
+    ctx.beginPath();
+    ctx.moveTo(cx + side*s*0.23, ey);
+    ctx.lineTo(cx + side*s*0.38, ey - s*0.02);
+    ctx.stroke();
+  }
+  ctx.fillStyle = 'rgba(232,67,147,0.15)';
+  ctx.fillRect(0,0,w,30);
+  ctx.fillStyle = '#e84393';
+  ctx.font = '13px monospace';
+  ctx.fillText('ADV-GLASSES — Gradient-optimized color patterns on printed eyeglass frames', 12, 20);
+}
+
+function drawAdvHat(ctx, w, h) {
+  ctx.fillStyle = '#0a0a0a'; ctx.fillRect(0,0,w,h);
+  const cx = w/2, cy = h/2, s = Math.min(w,h)*0.7;
+  drawFaceOutline(ctx, cx, cy, s);
+  // hat brim
+  const hy = cy - s*0.48;
+  ctx.fillStyle = '#1a1a1a';
+  ctx.beginPath();
+  ctx.ellipse(cx, hy + s*0.05, s*0.45, s*0.06, 0, 0, Math.PI*2);
+  ctx.fill();
+  // hat body
+  ctx.beginPath();
+  ctx.moveTo(cx - s*0.32, hy + s*0.05);
+  ctx.quadraticCurveTo(cx - s*0.3, hy - s*0.2, cx, hy - s*0.22);
+  ctx.quadraticCurveTo(cx + s*0.3, hy - s*0.2, cx + s*0.32, hy + s*0.05);
+  ctx.fill();
+  // adversarial pattern on brim
+  const bw = s*0.42, bh = s*0.06;
+  const bx = cx - bw, by = hy;
+  for (let i = 0; i < 30; i++) {
+    const x = cx - s*0.4 + (i/30)*s*0.8;
+    const ph = s*0.055;
+    const colors = ['#ff1744','#00e5ff','#76ff03','#ff9100','#d500f9','#ffea00'];
+    ctx.fillStyle = colors[i % colors.length];
+    ctx.globalAlpha = 0.7 + Math.random()*0.3;
+    ctx.fillRect(x, by - s*0.01, s*0.027, ph);
+  }
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = 'rgba(255,215,64,0.15)';
+  ctx.fillRect(0,0,w,30);
+  ctx.fillStyle = '#ffd740';
+  ctx.font = '13px monospace';
+  ctx.fillText('ADV-HAT — Adversarial perturbation pattern printed on hat brim', 12, 20);
+}
+
+function drawCvDazzle(ctx, w, h) {
+  ctx.fillStyle = '#0a0a0a'; ctx.fillRect(0,0,w,h);
+  const cx = w/2, cy = h/2, s = Math.min(w,h)*0.7;
+  drawFaceOutline(ctx, cx, cy, s);
+  const ey = cy - s*0.08;
+  // asymmetric geometric patterns
+  ctx.globalAlpha = 0.75;
+  // left side: bold dark triangle over nose bridge + eye
+  ctx.fillStyle = '#111';
+  ctx.beginPath();
+  ctx.moveTo(cx - s*0.25, ey - s*0.12);
+  ctx.lineTo(cx - s*0.02, ey + s*0.05);
+  ctx.lineTo(cx - s*0.2, ey + s*0.15);
+  ctx.closePath(); ctx.fill();
+  // right side: contrasting white/blue shape
+  ctx.fillStyle = '#ddeeff';
+  ctx.beginPath();
+  ctx.moveTo(cx + s*0.05, ey - s*0.15);
+  ctx.lineTo(cx + s*0.28, ey - s*0.05);
+  ctx.lineTo(cx + s*0.18, ey + s*0.1);
+  ctx.lineTo(cx + s*0.02, ey + s*0.02);
+  ctx.closePath(); ctx.fill();
+  // stripes across nose bridge
+  ctx.strokeStyle = '#00e5ff';
+  ctx.lineWidth = s*0.015;
+  for (let i = 0; i < 5; i++) {
+    ctx.beginPath();
+    ctx.moveTo(cx - s*0.08, ey - s*0.06 + i*s*0.025);
+    ctx.lineTo(cx + s*0.06, ey - s*0.04 + i*s*0.03);
+    ctx.stroke();
+  }
+  // hair covering one eye (asymmetry)
+  ctx.fillStyle = '#1a0a2e';
+  ctx.beginPath();
+  ctx.moveTo(cx - s*0.38, cy - s*0.48);
+  ctx.quadraticCurveTo(cx - s*0.1, cy - s*0.35, cx - s*0.05, ey - s*0.02);
+  ctx.lineTo(cx - s*0.25, ey + s*0.05);
+  ctx.quadraticCurveTo(cx - s*0.4, cy - s*0.2, cx - s*0.42, cy - s*0.48);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+  // gems
+  const gemColors = ['#ff0055','#00ffaa','#5500ff','#ffff00'];
+  for (let i = 0; i < 6; i++) {
+    const gx = cx + (Math.random()-0.5)*s*0.5;
+    const gy = ey + (Math.random()-0.3)*s*0.25;
+    ctx.fillStyle = gemColors[i % gemColors.length];
+    ctx.beginPath();
+    const gs = s*0.015+Math.random()*s*0.01;
+    // diamond shape
+    ctx.moveTo(gx, gy-gs);
+    ctx.lineTo(gx+gs*0.7, gy);
+    ctx.lineTo(gx, gy+gs);
+    ctx.lineTo(gx-gs*0.7, gy);
+    ctx.closePath(); ctx.fill();
+  }
+  ctx.fillStyle = 'rgba(0,229,255,0.15)';
+  ctx.fillRect(0,0,w,30);
+  ctx.fillStyle = '#00e5ff';
+  ctx.font = '13px monospace';
+  ctx.fillText('CV DAZZLE — Asymmetric geometric camouflage breaking facial continuity', 12, 20);
+}
+
+function drawLightProj(ctx, w, h) {
+  ctx.fillStyle = '#0a0a0a'; ctx.fillRect(0,0,w,h);
+  const cx = w/2, cy = h/2, s = Math.min(w,h)*0.7;
+  drawFaceOutline(ctx, cx, cy, s);
+  // projected light pattern
+  ctx.globalCompositeOperation = 'screen';
+  // structured light grid
+  ctx.strokeStyle = 'rgba(100,255,100,0.35)';
+  ctx.lineWidth = 1;
+  for (let x = cx - s*0.35; x < cx + s*0.35; x += s*0.04) {
+    ctx.beginPath();
+    ctx.moveTo(x, cy - s*0.45);
+    ctx.lineTo(x, cy + s*0.45);
+    ctx.stroke();
+  }
+  for (let y = cy - s*0.45; y < cy + s*0.45; y += s*0.04) {
+    ctx.beginPath();
+    ctx.moveTo(cx - s*0.35, y);
+    ctx.lineTo(cx + s*0.35, y);
+    ctx.stroke();
+  }
+  // bright adversarial blobs
+  for (let i = 0; i < 15; i++) {
+    const px = cx + (Math.random()-0.5)*s*0.55;
+    const py = cy + (Math.random()-0.5)*s*0.7;
+    const r = s*0.02 + Math.random()*s*0.04;
+    const grad = ctx.createRadialGradient(px, py, 0, px, py, r);
+    const hue = Math.random()*360;
+    grad.addColorStop(0, `hsla(${hue},100%,70%,0.6)`);
+    grad.addColorStop(1, `hsla(${hue},100%,50%,0)`);
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(px, py, r, 0, Math.PI*2);
+    ctx.fill();
+  }
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.fillStyle = 'rgba(100,255,100,0.15)';
+  ctx.fillRect(0,0,w,30);
+  ctx.fillStyle = '#66ff66';
+  ctx.font = '13px monospace';
+  ctx.fillText('LIGHT PROJECTION — Adversarial patterns projected onto face via projector', 12, 20);
+}
+
+function drawSubtleKeypoint(ctx, w, h) {
+  ctx.fillStyle = '#0a0a0a'; ctx.fillRect(0,0,w,h);
+  const cx = w/2, cy = h/2, s = Math.min(w,h)*0.7;
+  drawFaceOutline(ctx, cx, cy, s);
+  const ey = cy - s*0.08;
+  // subtle darkening on keypoint regions
+  ctx.globalAlpha = 0.35;
+  // brow line darkening
+  for (const side of [-1, 1]) {
+    const bx = cx + side*s*0.13;
+    const grad = ctx.createLinearGradient(bx - side*s*0.08, ey - s*0.08, bx + side*s*0.08, ey - s*0.04);
+    grad.addColorStop(0, 'rgba(40,20,10,0.6)');
+    grad.addColorStop(1, 'rgba(40,20,10,0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(bx - s*0.09, ey - s*0.1, s*0.18, s*0.04);
+  }
+  // nose bridge shadow
+  ctx.fillStyle = 'rgba(30,15,10,0.5)';
+  ctx.beginPath();
+  ctx.moveTo(cx - s*0.025, ey + s*0.01);
+  ctx.lineTo(cx + s*0.025, ey + s*0.01);
+  ctx.lineTo(cx + s*0.02, cy + s*0.08);
+  ctx.lineTo(cx - s*0.02, cy + s*0.08);
+  ctx.closePath(); ctx.fill();
+  // jaw contour line
+  ctx.strokeStyle = 'rgba(40,20,10,0.4)';
+  ctx.lineWidth = s*0.02;
+  ctx.beginPath();
+  ctx.moveTo(cx - s*0.35, cy);
+  ctx.quadraticCurveTo(cx - s*0.3, cy + s*0.35, cx, cy + s*0.42);
+  ctx.quadraticCurveTo(cx + s*0.3, cy + s*0.35, cx + s*0.35, cy);
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+  // keypoint indicators
+  ctx.fillStyle = 'rgba(255,100,50,0.5)';
+  ctx.font = `${s*0.03}px monospace`;
+  const kps = [
+    [cx, ey - s*0.07, 'brow L'], [cx + s*0.26, ey - s*0.07, 'brow R'],
+    [cx, cy + s*0.02, 'nose bridge'],
+    [cx - s*0.18, cy + s*0.25, 'jaw L'], [cx + s*0.18, cy + s*0.25, 'jaw R']
+  ];
+  for (const [x, y, label] of kps) {
+    ctx.beginPath();
+    ctx.arc(x, y, s*0.008, 0, Math.PI*2);
+    ctx.fill();
+  }
+  ctx.fillStyle = 'rgba(255,150,50,0.15)';
+  ctx.fillRect(0,0,w,30);
+  ctx.fillStyle = '#ff9632';
+  ctx.font = '13px monospace';
+  ctx.fillText('SUBTLE KEYPOINT — Minimal darkening on brow, nose bridge, jaw contours', 12, 20);
+}
+
+// ============================================================
+//  BOOT
+// ============================================================
+init();
+</script>
+</body>
+</html>
