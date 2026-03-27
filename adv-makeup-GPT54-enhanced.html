@@ -366,6 +366,7 @@
         </div>
         <div class="stack">
           <button id="scanBtn" class="action-btn">Scansiona faccia</button>
+          <button id="mirrorToggle" class="action-btn">Mirror webcam</button>
           <button id="saveBtn" class="action-btn">Salva faccia</button>
           <button id="findBtn" class="action-btn">Trova faccia</button>
           <button id="clearDbBtn" class="secondary-btn">Azzera archivio locale</button>
@@ -458,8 +459,20 @@
       findBtn: document.getElementById('findBtn'),
       clearDbBtn: document.getElementById('clearDbBtn'),
       clearOverlayBtn: document.getElementById('clearOverlayBtn'),
-      previewButtons: Array.from(document.querySelectorAll('.preview-btn'))
+      previewButtons: Array.from(document.querySelectorAll('.preview-btn')),
+      mirrorToggle: document.getElementById('mirrorToggle')
     };
+
+    let isMirrored = false;
+    // Mirror toggle logic
+    els.mirrorToggle.addEventListener('click', () => {
+      isMirrored = !isMirrored;
+      els.video.style.transform = isMirrored ? 'scaleX(-1)' : 'scaleX(1)';
+      els.mirrorToggle.classList.toggle('mirrored', isMirrored);
+      els.mirrorToggle.textContent = isMirrored ? 'Webcam speculare: ON' : 'Mirror webcam';
+    });
+    // Initialize mirror state on load
+    els.video.style.transform = 'scaleX(1)';
 
     let db = loadDb();
     let activeEffect = null;
