@@ -242,6 +242,32 @@ export function onClear(ctx) {
         L'Engine passa a questo Hook prima di effettuare uno "switch" verso un altro plugin, garantendovi un life-cycle appropriato in cui eliminare custom listeners o fermare calcoli costosi derivati se necessario.
       </div>
     </section>
+
+    <section>
+      <h2>Modalità Diagnostica (Test CV Dazzle)</h2>
+      <p>Ghostati non si limita ad applicare il trucco AR in modo cosmetico, ma include uno strumento di <strong>Diagnostica e Analisi delle Vulnerabilità</strong> progettato per valutare la reale efficacia del <em>Ghostyle</em> nel neutralizzare gli algoritmi di Facial Recognition (CV Dazzle).</p>
+      
+      <div class="block-explain">
+        <strong>Pulsante "Scansiona Trucco" e Compositing Off-screen</strong>
+        Quando un Ghostyle è attivo, il normale pulsante maschera la sua funzione primaria e si trasforma in "Scansiona Trucco". Premendolo, il sistema:
+        <ol style="margin-top: 8px; margin-bottom: 8px; padding-left: 20px;">
+          <li>Genera un <strong>canvas off-screen</strong> invisibile all'utente.</li>
+          <li>Esegue un <em>compositing</em> fondendo pixel per pixel il feed reale della webcam con l'output grafico del trucco (mantenendone inalterate le opacità e i colori originali).</li>
+          <li>Forza il motore neurale (<code>face-api</code>) a scansionare questa nuova immagine sintetica per vedere se riesce ad estrarre la stessa identità.</li>
+        </ol>
+        Durante questo processo, l'overlay a schermo rimane "bloccato" per continuare a fungere da specchio di guida, senza scomodi fade-out visivi.
+      </div>
+
+      <div class="block-explain">
+        <strong>Opacità e Colori: Il fattore di difficoltà</strong>
+        Ai fini del test, il Canvas composito rispetta testualmente gli stili <code>rgba()</code> del tuo codice (non li forza al 100% di opacità). Questo significa che se usi colori troppo tenui, c'è un'alta probabilità che il sistema biometrico riesca a "vedere attraverso" il tratto. Nell'archivio locale a schermo è annotata in tempo reale "l'Opacità stimata" del trucco.
+      </div>
+
+      <div class="block-explain">
+        <strong>Pulsante "Copia Volto Truccato"</strong>
+        Una volta che la simulazione è conclusa con successo, un pulsante speciale si accende. Cliccandolo, l'immagina composita generata <em>(volto della webcam alterato permanentemente dal Ghostyle sovrapposto)</em> viene salvata comodamente negli Appunti del sistema operativo, pronta per essere ispezionata.
+      </div>
+    </section>
   </div>
 </body>
 </html>

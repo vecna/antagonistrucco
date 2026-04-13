@@ -348,24 +348,28 @@
       <div>
         <h1>Ghostati</h1>
         <div class="subtitle">
-          Un esperimento di <a https="https://www.nina.watch">NINA</a>, <a href="https://sindacato.nina.watch/ghostati" style="color: var(--accent-2);">Scopri di più</a>.
+          Stabile solo al <a https="https://www.nina.watch/festival.html">Festival di NINA</a>, <a href="https://sindacato.nina.watch/ghostati" style="color: var(--accent-2);">Scopri di più</a>.
         </div>
       </div>
       <section class="about">
         <p>
-          27 Marzo: test preliminare, 9 Maggio: workshop all'aperto!
+          Qui è tutto in ALPHA, se vuoi passa sul <a style="color: var(--accent-2);" href="https://github.com/vecna/antagonistrucco">repository</a>.
         </p>
       </section>
     </header>
 
     <main class="layout">
       <section class="panel controls">
+        <div class="panel-header" id="diagnosisBox" style="background: linear-gradient(135deg, rgba(159, 122, 234, 0.12), rgba(122, 162, 255, 0.08)); border-bottom: 1px solid rgba(159, 122, 234, 0.3); padding-bottom: 20px; text-align: center;">
+          <h2 style="color: var(--accent-2); margin-bottom: 12px; font-size: 15px; letter-spacing: 0.05em; text-transform: uppercase;">Verifica efficacia</h2>
+          <button id="scanBtn" class="action-btn" style="transition: all 0.3s ease;">Scansiona Faccia</button>
+          <button id="copyMakeupBtn" class="secondary-btn" disabled style="margin-top: 8px; font-size: 11px;">Copia volto truccato</button>
+        </div>
         <div class="panel-header">
           <h2>Comandi</h2>
-          <p>Scansione, salvataggio e ricerca del volto corrente.</p>
+          <p>Salvataggio e ricerca del volto corrente.</p>
         </div>
         <div class="stack">
-          <button id="scanBtn" class="action-btn">Scansiona faccia</button>
           <button id="mirrorToggle" class="action-btn">Mirror webcam</button>
           <select id="fpsSelect" class="secondary-btn" style="text-align: center; cursor: pointer; appearance: none; -webkit-appearance: none; border-color: rgba(255,255,255,0.06);">
             <option value="30">Tracking: Real-time (30ms)</option>
@@ -383,6 +387,7 @@
           <div class="metric"><span>Volti salvati</span><strong id="dbCount">0</strong></div>
           <div class="metric"><span>Prossimo ID</span><strong id="nextId">0</strong></div>
           <div class="metric"><span>Soglia match</span><strong id="thresholdLabel">0.58</strong></div>
+          <div class="metric"><span>Opacità stimata del trucco</span><strong>0.45</strong></div>
         </div>
       </section>
 
@@ -414,7 +419,7 @@
         <div id="ghostyleDetails" class="stack" style="padding-top: 0; border-top: 1px solid rgba(255,255,255,0.05); margin-top: -12px; background-color: var(--accent-2); border-radius: 12px;">
            <input type="url" id="remoteGhostyleUrl" style="background: rgba(0,0,0,0.3); font-size:12px; text-align: left; padding: 10px; cursor: text;" placeholder="https://.../urleffect.js" />
            <button id="loadRemoteGhostyleBtn" class="secondary-btn" style="margin-top: -6px;">Carica Ghostyle Remoto</button>
-           <a href="ghostati-docs.html" class="btn-link" style="text-align: center; color: var(--bg); display: block; border-color: rgba(255,255,255,0.2);">📖 Sviluppa in Ghostyle</a>
+           <a href="ghostati-docs.html" class="btn-link" style="text-align: center; color: var(--bg);">📖 Sviluppa in Ghostyle</a>
         </div>
         <p class="small-note">
           Un click attiva la guida sulla webcam; un secondo click sullo stesso pulsante la spegne e torna il feed pulito.
@@ -460,6 +465,7 @@
       effectName: document.getElementById('effectName'),
       effectTracking: document.getElementById('effectTracking'),
       scanBtn: document.getElementById('scanBtn'),
+      copyMakeupBtn: document.getElementById('copyMakeupBtn'),
       saveBtn: document.getElementById('saveBtn'),
       findBtn: document.getElementById('findBtn'),
       clearDbBtn: document.getElementById('clearDbBtn'),
@@ -504,6 +510,7 @@
     let lastEffectRun = 0;
     let isSystemBusy = false;
     let lastKnownEffectResult = null;
+    let lastCompositedCanvas = null;
 
     function loadDb() {
       try {
@@ -560,8 +567,9 @@
 
     function setBusy(isBusy) {
       isSystemBusy = isBusy;
-      [els.scanBtn, els.saveBtn, els.findBtn, els.clearDbBtn, els.clearOverlayBtn, els.loadRemoteGhostyleBtn].forEach(btn => {
-        btn.disabled = isBusy;
+      [els.scanBtn, els.copyMakeupBtn, els.saveBtn, els.findBtn, els.clearDbBtn, els.clearOverlayBtn, els.loadRemoteGhostyleBtn].forEach(btn => {
+        if (btn === els.copyMakeupBtn && !lastCompositedCanvas) btn.disabled = true;
+        else btn.disabled = isBusy;
       });
       const previewBtns = els.ghostylesContainer.querySelectorAll('.preview-btn');
       previewBtns.forEach(btn => btn.disabled = isBusy);
@@ -927,8 +935,15 @@
       stopEffectLoop();
       const previewBtns = els.ghostylesContainer.querySelectorAll('.preview-btn');
       previewBtns.forEach(btn => btn.classList.remove('active'));
+      els.scanBtn.textContent = 'Scansiona faccia';
+      els.scanBtn.style.background = '';
+      els.scanBtn.style.borderColor = '';
+      els.scanBtn.style.color = '';
+
       updateEffectStats();
       lastKnownEffectResult = null;
+      lastCompositedCanvas = null;
+      els.copyMakeupBtn.disabled = true;
       clearOverlay();
       if (!silent) setLog('Guida makeup disattivata. Webcam ripristinata senza overlay.');
     }
@@ -955,6 +970,11 @@
       const style = loadedGhostyles.get(effect);
       setLog(`Guida makeup attiva: ${style ? style.name : effect}. Cerca un volto nella webcam per vedere dove applicarlo.`);
       
+      els.scanBtn.textContent = 'Scansiona trucco';
+      els.scanBtn.style.background = 'linear-gradient(180deg, rgba(159, 122, 234, 0.35), rgba(159, 122, 234, 0.15))';
+      els.scanBtn.style.borderColor = 'rgba(159, 122, 234, 0.5)';
+      els.scanBtn.style.color = '#fff';
+
       if (overlayFadeTimeout) clearTimeout(overlayFadeTimeout);
       els.overlay.style.transition = 'none';
       els.overlay.style.opacity = '1';
@@ -1059,16 +1079,113 @@
       setLog(fallbackMessage + detail);
     }
 
+    async function testMakeupEfficacy() {
+      const result = await detectCurrentFace(false);
+      if (!result) {
+        setLog('Nessun volto di base trovato. Avvicinati alla webcam.');
+        return;
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = els.overlay.width;
+      canvas.height = els.overlay.height;
+      const ctx = canvas.getContext('2d');
+
+      ctx.drawImage(els.video, 0, 0, canvas.width, canvas.height);
+
+      const style = loadedGhostyles.get(activeEffect);
+      if (style && style.module.onDraw) {
+        ctx.save();
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        const resized = faceapi.resizeResults(result, { width: canvas.width, height: canvas.height });
+        style.module.onDraw(ctx, resized.landmarks, resized.detection.box);
+        ctx.restore();
+      }
+
+      lastCompositedCanvas = canvas;
+      els.copyMakeupBtn.disabled = false;
+
+      setLog('Analisi in corso... sottopongo il compositing a face-api');
+
+      const obfuscatedResult = await faceapi.detectSingleFace(canvas, DETECTOR_OPTIONS)
+        .withFaceLandmarks()
+        .withFaceDescriptor();
+
+      if (!obfuscatedResult) {
+        setLog('Risultato: ECCELLENTE. Il trucco ha frammentato il volto al punto da distruggere l\'algoritmo (nessun volto rilevato).');
+        return;
+      }
+
+      const dist = distance(result.descriptor, obfuscatedResult.descriptor);
+      if (dist > MATCH_THRESHOLD) {
+        setLog(`Risultato: BUONO (Spoofed). Volto individuato, ma l'identità biometrica è irriconoscibile (distanza: ${dist.toFixed(3)}).`);
+      } else {
+        setLog(`Risultato: INSUFFICIENTE. Il sistema ti riconosce ancora perfettamente (distanza: ${dist.toFixed(3)} <= ${MATCH_THRESHOLD.toFixed(2)}). Aggiungi geometrie.`);
+      }
+    }
+
     async function init() {
       renderDbStats();
       updateEffectStats();
       resizeCanvas();
       window.addEventListener('resize', resizeCanvas);
 
+      els.copyMakeupBtn.addEventListener('click', async () => {
+        if (!lastCompositedCanvas) return;
+        try {
+          const exportCanvas = document.createElement('canvas');
+          const headerHeight = 44;
+          const footerHeight = 50;
+          exportCanvas.width = lastCompositedCanvas.width;
+          exportCanvas.height = lastCompositedCanvas.height + headerHeight + footerHeight;
+          const ctx = exportCanvas.getContext('2d');
+          
+          ctx.fillStyle = '#0f1115';
+          ctx.fillRect(0, 0, exportCanvas.width, exportCanvas.height);
+          
+          ctx.drawImage(lastCompositedCanvas, 0, headerHeight);
+          
+          ctx.fillStyle = '#eef2ff';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          
+          const style = loadedGhostyles.get(activeEffect);
+          const pluginName = style ? style.name : 'Unknown Plugin';
+          ctx.font = 'bold 14px Inter, sans-serif';
+          ctx.fillText(`github.com/vecna/antagonistrucco | Modulo attivo: ${pluginName}`, exportCanvas.width / 2, headerHeight / 2);
+          
+          const logText = els.logMessage.textContent;
+          ctx.font = '14px Inter, sans-serif';
+          ctx.fillStyle = '#3ddc97'; // default verde o bianco, usiamo un bianco leggero
+          if (logText.includes('ECCELLENTE') || logText.includes('BUONO')) ctx.fillStyle = '#3ddc97';
+          else if (logText.includes('INSUFFICIENTE')) ctx.fillStyle = '#ff7a7a';
+          else ctx.fillStyle = '#eef2ff';
+          
+          ctx.fillText(logText, exportCanvas.width / 2, exportCanvas.height - footerHeight / 2);
+
+          exportCanvas.toBlob(blob => {
+             navigator.clipboard.write([new ClipboardItem({'image/png': blob})]).then(() => {
+                setLog('Immagine con referto diagnostico copiata negli appunti!');
+             });
+          });
+        } catch (err) {
+           console.error(err);
+           setLog('Errore durante la copia. Forse manca il permesso nel browser?');
+        }
+      });
+
       els.scanBtn.addEventListener('click', async () => {
         setBusy(true);
-        try { await scanFace(); }
-        catch (err) { handleError(err, 'Errore durante la scansione del volto.'); }
+        try {
+           if (activeEffect) {
+             await testMakeupEfficacy();
+             // Il trucco rimane bloccato sullo schermo, niente fadeout o clear
+           } else {
+             await scanFace();
+           }
+        }
+        catch (err) { handleError(err, 'Errore durante la scansione o l\'analisi avversaria.'); }
         finally {
           setBusy(false);
           if (activeEffect) startEffectLoop();
