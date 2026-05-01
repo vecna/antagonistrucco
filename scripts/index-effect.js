@@ -1,6 +1,10 @@
 const hero = document.getElementById('ghostHero');
 const link = document.getElementById('ghostLink');
 const veil = document.getElementById('ghostVeil');
+const topbar = document.getElementById('ghostTopbar');
+const progressDisplay = document.getElementById('revealProgress');
+const menuToggle = document.getElementById('ghostMenuToggle');
+const topbarMenu = document.getElementById('ghostTopbarMenu');
 
 if (!hero || !link || !veil) {
   throw new Error('Ghostati hero elements not found.');
@@ -41,6 +45,7 @@ function updateUnlockState() {
 
   state.unlocked = shouldUnlock;
   hero.classList.toggle('is-unlocked', shouldUnlock);
+  topbar?.classList.toggle('is-unlocked', shouldUnlock);
   link.setAttribute('aria-disabled', String(!shouldUnlock));
   link.tabIndex = shouldUnlock ? 0 : -1;
 
@@ -59,6 +64,15 @@ function updateUnlockState() {
   }
 
   hero.classList.remove('just-unlocked');
+}
+
+function updateProgressDisplay() {
+  if (!progressDisplay) {
+    return;
+  }
+
+  const percentage = Math.round(clamp(state.revealRatio) * 100);
+  progressDisplay.textContent = `${percentage}%`;
 }
 
 function fillVeil() {
@@ -139,6 +153,7 @@ function updateRevealRatio() {
   }
 
   state.revealRatio = sampled ? clamp(transparent / sampled) : 0;
+  updateProgressDisplay();
   updateUnlockState();
 }
 
@@ -180,15 +195,31 @@ function handlePointerMove(clientX, clientY) {
   queueInteractionFrame();
 }
 
+function interactionTargetsTopbar(target) {
+  return target instanceof Element && Boolean(target.closest('#ghostTopbar'));
+}
+
 window.addEventListener('pointermove', (event) => {
+  if (interactionTargetsTopbar(event.target)) {
+    return;
+  }
+
   handlePointerMove(event.clientX, event.clientY);
 });
 
 window.addEventListener('pointerdown', (event) => {
+  if (interactionTargetsTopbar(event.target)) {
+    return;
+  }
+
   handlePointerMove(event.clientX, event.clientY);
 });
 
 window.addEventListener('touchstart', (event) => {
+  if (interactionTargetsTopbar(event.target)) {
+    return;
+  }
+
   const touch = event.touches?.[0];
   if (!touch) {
     return;
@@ -198,6 +229,10 @@ window.addEventListener('touchstart', (event) => {
 }, { passive: true });
 
 window.addEventListener('touchmove', (event) => {
+  if (interactionTargetsTopbar(event.target)) {
+    return;
+  }
+
   const touch = event.touches?.[0];
   if (!touch) {
     return;
@@ -208,7 +243,19 @@ window.addEventListener('touchmove', (event) => {
 
 window.addEventListener('resize', queueResize);
 
+window.addEventListener('resize', () => {
+  if (window.matchMedia('(min-width: 901px) and (pointer: fine)').matches) {
+    topbar?.classList.remove('is-open');
+    menuToggle?.setAttribute('aria-expanded', 'false');
+  }
+});
+
 window.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') {
+    topbar?.classList.remove('is-open');
+    menuToggle?.setAttribute('aria-expanded', 'false');
+  }
+
   if (event.key === 'Enter' && !state.unlocked) {
     event.preventDefault();
   }
@@ -220,5 +267,30 @@ link.addEventListener('click', (event) => {
   }
 });
 
+menuToggle?.addEventListener('click', () => {
+  const nextOpen = !topbar?.classList.contains('is-open');
+  topbar?.classList.toggle('is-open', nextOpen);
+  menuToggle.setAttribute('aria-expanded', String(Boolean(nextOpen)));
+});
+
+topbarMenu?.querySelectorAll('a').forEach((anchor) => {
+  anchor.addEventListener('click', () => {
+    topbar?.classList.remove('is-open');
+    menuToggle?.setAttribute('aria-expanded', 'false');
+  });
+});
+
+window.addEventListener('pointerdown', (event) => {
+  const target = event.target;
+  const clickedOutsideTopbar = target instanceof Element && !target.closest('#ghostTopbar');
+  if (!clickedOutsideTopbar) {
+    return;
+  }
+
+  topbar?.classList.remove('is-open');
+  menuToggle?.setAttribute('aria-expanded', 'false');
+});
+
 resizeCanvas(false);
+updateProgressDisplay();
 updateUnlockState();

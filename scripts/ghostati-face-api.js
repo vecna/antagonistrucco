@@ -129,9 +129,46 @@ function updateEffectStats() {
    els.effectTracking.textContent = activeEffect ? 'on' : 'off';
 }
 
+let logsArchive = [];
+window.visibleLogStartIndex = 0;
+let isLogExpanded = false;
+
+function formatTime() {
+   const now = new Date();
+   return now.toTimeString().split(' ')[0]; // Returns HH:MM:SS
+}
+
+function updateLogDisplay() {
+   els.logBox.innerHTML = '';
+   
+   if (isLogExpanded) {
+      els.logBox.classList.add('expanded');
+      const startIdx = Math.max(0, logsArchive.length - 100);
+      for (let i = startIdx; i < logsArchive.length; i++) {
+         const clone = logsArchive[i].cloneNode(true);
+         els.logBox.appendChild(clone);
+      }
+      els.logBox.scrollTop = els.logBox.scrollHeight;
+   } else {
+      els.logBox.classList.remove('expanded');
+      let renderedCount = 0;
+      for (let i = logsArchive.length - 1; i >= window.visibleLogStartIndex && renderedCount < 4; i--) {
+         const clone = logsArchive[i].cloneNode(true);
+         els.logBox.insertBefore(clone, els.logBox.firstChild);
+         renderedCount++;
+      }
+   }
+}
+
 function setLog(message, sourcePlugin = null) {
    const line = document.createElement('div');
    line.className = 'log-line';
+
+   const timeSpan = document.createElement('span');
+   timeSpan.style.color = 'var(--muted)';
+   timeSpan.style.marginRight = '8px';
+   timeSpan.textContent = `[${formatTime()}]`;
+   line.appendChild(timeSpan);
 
    if (sourcePlugin) {
       const span = document.createElement('span');
@@ -145,11 +182,13 @@ function setLog(message, sourcePlugin = null) {
    textSpan.textContent = message;
    line.appendChild(textSpan);
 
-   els.logBox.insertBefore(line, els.logBox.firstChild);
-
-   while (els.logBox.children.length > 5) {
-      els.logBox.removeChild(els.logBox.lastChild);
+   logsArchive.push(line);
+   if (logsArchive.length > 100) {
+      logsArchive.shift();
+      if (window.visibleLogStartIndex > 0) window.visibleLogStartIndex--;
    }
+   
+   updateLogDisplay();
 }
 
 function setStatus(kind, text) {
@@ -247,6 +286,13 @@ function drawLabel(ctx, text, x, y) {
    const padY = 7;
    const width = ctx.measureText(text).width + padX * 2;
    const height = 30;
+
+   if (typeof isMirrored !== 'undefined' && isMirrored) {
+      ctx.translate(x + width / 2, y - height / 2);
+      ctx.scale(-1, 1);
+      ctx.translate(-(x + width / 2), -(y - height / 2));
+   }
+
    ctx.fillStyle = 'rgba(15, 17, 21, 0.78)';
    ctx.strokeStyle = 'rgba(255,255,255,0.10)';
    ctx.lineWidth = 1;
@@ -316,8 +362,30 @@ function drawContourBand(ctx, pts, label) {
    drawLabel(ctx, label, mid.x + 10, mid.y - 6);
 }
 
+let nudgeStep = localStorage.getItem('ghostati-nudge-done') ? 6 : 1;
+
+function updateNudging() {
+   if (nudgeStep > 5) return;
+   
+   document.querySelectorAll('.nudge-target').forEach(el => el.classList.remove('nudge-target'));
+   
+   if (nudgeStep === 1) els.scanBtn.classList.add('nudge-target');
+   if (nudgeStep === 2) els.saveBtn.classList.add('nudge-target');
+   if (nudgeStep === 3) {
+      const toggleBtn = document.getElementById('toggleSettingsBtn');
+      if (toggleBtn) toggleBtn.classList.add('nudge-target');
+      els.ghostylesContainer.querySelectorAll('.preview-btn').forEach(btn => btn.classList.add('nudge-target'));
+   }
+   if (nudgeStep === 4) els.scanBtn.classList.add('nudge-target');
+   if (nudgeStep === 5 && !els.copyMakeupBtn.disabled) els.copyMakeupBtn.classList.add('nudge-target');
+}
+
 window.Ghostati = {
    log: (message, sourcePlugin) => setLog(message, sourcePlugin),
+   clearVisibleLogs: () => {
+      window.visibleLogStartIndex = logsArchive.length;
+      updateLogDisplay();
+   },
    distance,
    avgPoint,
    lerp,
@@ -428,7 +496,33 @@ function drawDetectionScaffold(ctx, resized) {
    const lines = ['volto rilevato'];
    if (typeof resized.age === 'number') lines.push(`eta stimata: ${Math.round(resized.age)}`);
    if (resized.gender) lines.push(`genere stimato: ${resized.gender}`);
-   new faceapi.draw.DrawTextField(lines, { x: box.x, y: Math.max(16, box.y - 8) }).draw(els.overlay);
+
+   ctx.font = '14px Inter, system-ui, sans-serif';
+   const pad = 6;
+   const lineHeight = 18;
+   const maxWidth = Math.max(...lines.map(l => ctx.measureText(l).width));
+   const boxWidth = maxWidth + pad * 2;
+   const boxHeight = lines.length * lineHeight + pad * 2;
+   const startX = box.x;
+   const startY = Math.max(16, box.y - boxHeight - 8);
+
+   if (typeof isMirrored !== 'undefined' && isMirrored) {
+      ctx.translate(startX + boxWidth / 2, startY + boxHeight / 2);
+      ctx.scale(-1, 1);
+      ctx.translate(-(startX + boxWidth / 2), -(startY + boxHeight / 2));
+   }
+
+   ctx.fillStyle = 'rgba(15, 17, 21, 0.78)';
+   ctx.strokeStyle = 'rgba(255,255,255,0.10)';
+   ctx.lineWidth = 1;
+   roundRect(ctx, startX, startY, boxWidth, boxHeight, 8);
+   ctx.fill();
+   ctx.stroke();
+
+   ctx.fillStyle = 'rgba(238, 242, 255, 0.96)';
+   lines.forEach((line, i) => {
+      ctx.fillText(line, startX + pad, startY + pad + (i + 1) * lineHeight - 4);
+   });
    ctx.restore();
 }
 
@@ -540,7 +634,6 @@ function deactivateEffect({ silent = false } = {}) {
    stopEffectLoop();
    const previewBtns = els.ghostylesContainer.querySelectorAll('.preview-btn');
    previewBtns.forEach(btn => btn.classList.remove('active'));
-   els.scanBtn.textContent = 'Scansiona faccia';
    els.scanBtn.style.background = '';
    els.scanBtn.style.borderColor = '';
    els.scanBtn.style.color = '';
@@ -575,10 +668,11 @@ function toggleEffect(effect, button) {
    const style = loadedGhostyles.get(effect);
    setLog(`Guida makeup attiva: ${style ? style.name : effect}. Cerca un volto nella webcam per vedere dove applicarlo.`);
 
-   els.scanBtn.textContent = 'Scansiona trucco';
    els.scanBtn.style.background = 'linear-gradient(180deg, rgba(159, 122, 234, 0.35), rgba(159, 122, 234, 0.15))';
    els.scanBtn.style.borderColor = 'rgba(159, 122, 234, 0.5)';
    els.scanBtn.style.color = '#fff';
+
+   if (nudgeStep === 3) { nudgeStep = 4; updateNudging(); }
 
    if (overlayFadeTimeout) clearTimeout(overlayFadeTimeout);
    els.overlay.style.transition = 'none';
@@ -595,6 +689,8 @@ async function scanFace() {
    const gender = result.gender || 'n/d';
    const confidence = typeof result.genderProbability === 'number' ? ` (${Math.round(result.genderProbability * 100)}%)` : '';
    setLog(`Volto trovato. Età stimata: ${age}. Genere stimato: ${gender}${confidence}. Overlay biometrico aggiornato.`);
+   
+   if (nudgeStep === 1) { nudgeStep = 2; updateNudging(); }
 }
 
 async function saveFace() {
@@ -612,6 +708,8 @@ async function saveFace() {
    });
    persistDb();
    setLog(`Impronta biometrica salvata con ID ${id}. Archivio locale aggiornato.`);
+
+   if (nudgeStep === 2) { nudgeStep = 3; updateNudging(); }
 }
 
 async function findFace() {
@@ -729,15 +827,29 @@ async function testMakeupEfficacy() {
       .withFaceDescriptor();
 
    if (!obfuscatedResult) {
-      setLog('Risultato: ECCELLENTE. Il trucco ha frammentato il volto al punto da distruggere l\'algoritmo (nessun volto rilevato).');
+      if (db.faces.length === 0) {
+         setLog('Risultato: NESSUN VOLTO INDIVIDUATO. Rilevatore ingannato! (Salva un volto nel DB per testare il riconoscimento).');
+      } else {
+         setLog('Risultato: ECCELLENTE. Il trucco ha frammentato il volto al punto da distruggere l\'algoritmo di rilevamento.');
+      }
       return;
    }
 
-   const dist = distance(result.descriptor, obfuscatedResult.descriptor);
-   if (dist > MATCH_THRESHOLD) {
-      setLog(`Risultato: BUONO (Spoofed). Volto individuato, ma l'identità biometrica è irriconoscibile (distanza: ${dist.toFixed(3)}).`);
+   if (db.faces.length === 0) {
+      const dist = distance(result.descriptor, obfuscatedResult.descriptor);
+      if (dist > MATCH_THRESHOLD) {
+         setLog(`Risultato: IDENTITÀ NASCOSTA. La tua impronta è irriconoscibile rispetto al volto base (distanza: ${dist.toFixed(3)}). Salva un volto nel DB per testare contro i salvataggi!`);
+      } else {
+         setLog(`Risultato: INSUFFICIENTE. L'identità biometrica è ancora intatta (distanza: ${dist.toFixed(3)} <= ${MATCH_THRESHOLD.toFixed(2)}).`);
+      }
    } else {
-      setLog(`Risultato: INSUFFICIENTE. Il sistema ti riconosce ancora perfettamente (distanza: ${dist.toFixed(3)} <= ${MATCH_THRESHOLD.toFixed(2)}). Aggiungi geometrie.`);
+      const dbMatches = db.faces.map(entry => distance(obfuscatedResult.descriptor, entry.descriptor));
+      const minDist = Math.min(...dbMatches);
+      if (minDist > MATCH_THRESHOLD) {
+         setLog(`Risultato: BUONO (Spoofed). Volto rilevato ma l'identità è irriconoscibile (distanza minima DB: ${minDist.toFixed(3)}).`);
+      } else {
+         setLog(`Risultato: INSUFFICIENTE. Il sistema ti riconosce ancora in archivio (distanza minima DB: ${minDist.toFixed(3)} <= ${MATCH_THRESHOLD.toFixed(2)}). Aggiungi geometrie.`);
+      }
    }
 }
 
@@ -746,6 +858,13 @@ async function init() {
    updateEffectStats();
    resizeCanvas();
    window.addEventListener('resize', resizeCanvas);
+
+   if (els.logBox) {
+      els.logBox.addEventListener('click', () => {
+         isLogExpanded = !isLogExpanded;
+         updateLogDisplay();
+      });
+   }
 
    els.copyMakeupBtn.addEventListener('click', async () => {
       if (!lastCompositedCanvas) return;
@@ -760,7 +879,15 @@ async function init() {
          ctx.fillStyle = '#0f1115';
          ctx.fillRect(0, 0, exportCanvas.width, exportCanvas.height);
 
-         ctx.drawImage(lastCompositedCanvas, 0, headerHeight);
+         if (isMirrored) {
+            ctx.save();
+            ctx.translate(exportCanvas.width, 0);
+            ctx.scale(-1, 1);
+            ctx.drawImage(lastCompositedCanvas, 0, headerHeight);
+            ctx.restore();
+         } else {
+            ctx.drawImage(lastCompositedCanvas, 0, headerHeight);
+         }
 
          ctx.fillStyle = '#eef2ff';
          ctx.textAlign = 'center';
@@ -769,11 +896,10 @@ async function init() {
          const style = loadedGhostyles.get(activeEffect);
          const pluginName = style ? style.name : 'Unknown Plugin';
          ctx.font = 'bold 14px Inter, sans-serif';
-         ctx.fillText(`github.com/vecna/antagonistrucco | Modulo attivo: ${pluginName}`, exportCanvas.width / 2, headerHeight / 2);
+         ctx.fillText(`github.com/vecna/antagonistrucco | Modulo: ${pluginName} | URL: https://sindacato.nina.watch/ghostati/`, exportCanvas.width / 2, headerHeight / 2);
 
-         const logText = els.logBox.firstChild ? els.logBox.firstChild.textContent : '';
+         const logText = els.logBox.lastChild ? els.logBox.lastChild.textContent : '';
          ctx.font = '14px Inter, sans-serif';
-         ctx.fillStyle = '#3ddc97'; // default verde o bianco, usiamo un bianco leggero
          if (logText.includes('ECCELLENTE') || logText.includes('BUONO')) ctx.fillStyle = '#3ddc97';
          else if (logText.includes('INSUFFICIENTE')) ctx.fillStyle = '#ff7a7a';
          else ctx.fillStyle = '#eef2ff';
@@ -781,9 +907,36 @@ async function init() {
          ctx.fillText(logText, exportCanvas.width / 2, exportCanvas.height - footerHeight / 2);
 
          exportCanvas.toBlob(blob => {
-            navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]).then(() => {
-               setLog('Immagine con referto diagnostico copiata negli appunti!');
-            });
+            const file = new File([blob], "ghostati-makeup.png", { type: "image/png" });
+            const attemptShare = () => {
+               if (navigator.share) {
+                  navigator.share({
+                     title: 'Ghostati Makeup',
+                     text: 'Il mio camouflage anti-riconoscimento!',
+                     files: [file]
+                  }).then(() => setLog('Immagine condivisa con successo!'))
+                    .catch(err => console.error('Share failed', err));
+               } else {
+                  setLog('Impossibile copiare l\'immagine (permessi mancanti o Share API non supportata).');
+               }
+            };
+
+            if (navigator.clipboard && navigator.clipboard.write) {
+               try {
+                  navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
+                  .then(() => setLog('Immagine con referto diagnostico copiata negli appunti!'))
+                  .catch(err => {
+                     console.error('Clipboard write fallito, provo fallback', err);
+                     attemptShare();
+                  });
+               } catch (err) {
+                  console.error(err);
+                  attemptShare();
+               }
+            } else {
+               attemptShare();
+            }
+            if (nudgeStep === 5) { nudgeStep = 6; localStorage.setItem('ghostati-nudge-done', 'true'); updateNudging(); }
          });
       } catch (err) {
          console.error(err);
@@ -795,6 +948,7 @@ async function init() {
       setBusy(true);
       try {
          if (activeEffect) {
+            if (nudgeStep === 4) { nudgeStep = 5; updateNudging(); }
             await testMakeupEfficacy();
             // Il trucco rimane bloccato sullo schermo, niente fadeout o clear
          } else {
@@ -829,14 +983,15 @@ async function init() {
    });
 
    els.clearDbBtn.addEventListener('click', () => {
+      const svgIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>';
       if (els.clearDbBtn.textContent === 'Conferma azzeramento?') {
          clearDb();
-         els.clearDbBtn.textContent = 'Azzera archivio locale';
+         els.clearDbBtn.innerHTML = svgIcon;
       } else {
          els.clearDbBtn.textContent = 'Conferma azzeramento?';
          setTimeout(() => {
             if (els.clearDbBtn.textContent === 'Conferma azzeramento?') {
-               els.clearDbBtn.textContent = 'Azzera archivio locale';
+               els.clearDbBtn.innerHTML = svgIcon;
             }
          }, 4000);
       }
@@ -889,7 +1044,7 @@ async function init() {
 
    setLog('Tutto pronto! Inizia scansionando il tuo volto o attivando una guida makeup.');
    setBusy(false);
-
+   updateNudging();
 }
 
 init();

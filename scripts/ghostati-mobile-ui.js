@@ -87,11 +87,9 @@ document.addEventListener('DOMContentLoaded', () => {
       clearOverlayBtn.click(); // Trigger the logic bound in face-api.js
     }
 
-    // 2. Clear the logbox (keep only the first waiting line, or clear entirely based on preference)
-    const logBox = document.getElementById('logBox');
-    if (logBox) {
-      // Clear all except the first line which we can reset to "Pronto"
-      logBox.innerHTML = '<div class="log-line">Schermo pulito. Pronto.</div>';
+    // 2. Clear the visible logs
+    if (window.Ghostati && window.Ghostati.clearVisibleLogs) {
+       window.Ghostati.clearVisibleLogs();
     }
   }
 

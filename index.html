@@ -5,16 +5,24 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Ghòstati</title>
-  <meta name="description"
-    content="Gòstati, diventa fantasma, sfuggi al riconoscimento facciale" />
+  <meta name="description" content="Gòstati, diventa fantasma, sfuggi al riconoscimento facciale" />
 
   <!-- Se mi rompi il cazzo perchè ho messo dei google fonts: hai ragione e fai bene. -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=League+Script&family=Outfit:wght@400;600;700;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
-  
+
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+  <link rel="dns-prefetch" href="https://cdn.jsdelivr.net" />
+
+  <link
+    href="https://fonts.googleapis.com/css2?family=League+Script&family=Outfit:wght@400;600;700;800;900&family=JetBrains+Mono:wght@400;700&display=swap"
+    rel="stylesheet">
+
   <link rel="stylesheet" href="styles/index.css" />
   <link rel="stylesheet" href="styles/ghostati-face-api.css" />
+
+  <link rel="canonical" href="https://sindacato.nina.watch/ghostati/" />
+  <meta name="robots" content="index, follow, max-image-preview:large">
 
   <meta property="description"
     content="Diventa un fantasma, sviluppa e testa camuffamenti anti-riconoscimento biometrico." />
@@ -24,17 +32,46 @@
 
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://sindacato.nina.watch/ghostati/" />
-  <meta property="og:image" content="https://sindacato.nina.watch/ghostati/facerec-transparency.png" />
+  <meta property="og:image" content="https://sindacato.nina.watch/ghostati/images/ghostati-hero.png" />
   <meta property="og:site_name" content="NINA" />
 
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Ghòstati, col Trucco Avverso" />
+  <meta name="twitter:description"
+    content="Strumento che usa la webcam per insegnarti camuffamenti anti-riconoscimento biometrico - Sviluppa il trucco/plugin!" />
+  <meta name="twitter:image" content="https://sindacato.nina.watch/ghostati/images/ghostati-hero.png" />
+
+  <meta name="theme-color" content="#9f7aea" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="apple-touch-icon" href="apple-touch-icon.png" />
 </head>
 
 <body>
 
+  <header class="ghost-topbar" id="ghostTopbar">
+    <p class="ghost-topbar__progress" id="revealProgress" aria-live="polite">0%</p>
+
+    <button class="ghost-topbar__toggle" id="ghostMenuToggle" type="button" aria-expanded="false"
+      aria-controls="ghostTopbarMenu" aria-label="Apri menu">
+      <span></span>
+      <span></span>
+      <span></span>
+    </button>
+
+    <nav class="ghost-topbar__nav" aria-label="Workshop e progetto">
+      <ul class="ghost-topbar__links" id="ghostTopbarMenu">
+        <li><a href="#">Workshop Milano · 9 Maggio</a></li>
+        <li><a href="#">Workshop Roma · 10 Maggio</a></li>
+        <li><a href="https://github.com/vecna/ghostati" target="_blank" rel="noopener noreferrer">codice</a></li>
+        <li><a href="ghostati-face-api.html">progetto</a></li>
+      </ul>
+    </nav>
+  </header>
+
   <main class="ghost-hero" id="ghostHero" data-target="ghostati-face-api.html">
     <canvas class="ghost-hero__veil" id="ghostVeil" aria-hidden="true"></canvas>
 
-    <img class="ghost-hero__image" src="images/ghostati-hero.png" 
+    <img class="ghost-hero__image" src="images/ghostati-hero.png"
       alt="Immagine semi-temporanea di un volto generato con un lamerissimo servizio." />
 
     <a class="ghost-hero__wordmark" id="ghostLink" href="ghostati-face-api.html" aria-disabled="true" tabindex="-1">
