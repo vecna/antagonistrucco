@@ -5,11 +5,44 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Ghòstati - Guida per Sviluppatori</title>
+  <link rel="stylesheet" href="styles/common.css" />
   <link rel="stylesheet" href="styles/ghostati-docs.css" />
-  <link rel="stylesheet" href="styles/index.css" />
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebPage",
+  "name": "Ghòstati - Guida per Sviluppatori",
+  "url": "https://sindacato.nina.watch/ghostati/ghostati-docs.html",
+  "author": {
+    "@type": "Organization",
+    "@id": "https://www.nina.watch/",
+    "name": "N.I.N.A. - Nè Intelligente Nè Artificiale"
+  },
+  "mainEntity": {
+    "@type": "TechArticle",
+    "headline": "Sviluppa il tuo Ghostyle",
+    "datePublished": "2026-04-21T12:00:00+02:00",
+    "dateModified": "2026-05-02T01:26:00+02:00",
+    "image": "https://sindacato.nina.watch/ghostati/images/docs-cover.jpg",
+    "proficiencyLevel": "Intermediate",
+    "author": {
+      "@type": "Person",
+      "@id": "https://me.vecna.eu",
+      "name": "vecna",
+    },
+    "publisher": {
+      "@id": "https://www.nina.watch/#organization"
+    },
+  },
+  "relatedLink": [
+    "https://github.com/vecna/ghostati"
+  ]
+}
+</script>
 </head>
 
-<body>
+<body class="page-docs">
   <div class="page">
 
     <header class="ghost-topbar" id="ghostTopbar">
@@ -31,12 +64,23 @@
 
     </header>
 
-    <h1>Documentazione</h1>
-    <div class="subtitle">Sviluppa il tuo Ghostyle</div>
+    <div class="jumbotron">
+      <h1>Documentazione</h1>
+      <div class="subtitle">Sviluppa il tuo Ghostyle</div>
+    </div>
 
+    <nav class="toc" aria-label="Table of Contents">
+      <h3>Indice dei Contenuti</h3>
+      <ul>
+        <li><a href="#architettura">Architettura ad Alto Livello</a></li>
+        <li><a href="#template">Template Didattico</a></li>
+        <li><a href="#spiegazione">Spiegazione dei Blocchi</a></li>
+        <li><a href="#diagnostica">Modalità Diagnostica (Test CV Dazzle)</a></li>
+      </ul>
+    </nav>
 
     <section>
-      <h2>Architettura ad Alto Livello</h2>
+      <h2 id="architettura">Architettura ad Alto Livello</h2>
       <p>Il sistema "Ghòstati" utilizza un'<strong>architettura a plugin modulari</strong> pensata per separare il
         nucleo di tracciamento facciale dagli effetti visivi (i "Ghostyles").</p>
 
@@ -56,7 +100,7 @@
     </section>
 
     <section>
-      <h2>Template Didattico</h2>
+      <h2 id="template">Template Didattico</h2>
       <p>Un plugin Ghòstyle per funzionare deve unicamente esportare un paio di funzioni specifiche (gli "Event Hooks").
         Questo snippet di codice rappresenta lo scheletro di base per cominciare a sviluppare.</p>
 
@@ -109,7 +153,7 @@ export function onClear(ctx) {
     </section>
 
     <section>
-      <h2>Spiegazione dei Blocchi</h2>
+      <h2 id="spiegazione">Spiegazione dei Blocchi</h2>
 
       <div class="block-explain">
         <strong>1. Metadati Commentati</strong>
@@ -149,7 +193,7 @@ export function onClear(ctx) {
     </section>
 
     <section>
-      <h2>Modalità Diagnostica (Test CV Dazzle)</h2>
+      <h2 id="diagnostica">Modalità Diagnostica (Test CV Dazzle)</h2>
       <p>Ghòstati non si limita ad applicare il trucco AR in modo cosmetico, ma include uno strumento di
         <strong>Diagnostica e Analisi delle Vulnerabilità</strong> progettato per valutare la reale efficacia del
         <em>Ghostyle</em> nel neutralizzare gli algoritmi di Facial Recognition (CV Dazzle).

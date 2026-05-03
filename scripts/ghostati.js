@@ -95,6 +95,11 @@ let lastCompositedCanvas = null;
 
 function loadDb() {
    try {
+      /* [SYSTEM API: localStorage]
+       * Funzionamento: Storage persistente chiave-valore sincrono nativo del browser.
+       * Parametri: getItem(key) per leggere stringhe. 
+       * Feature: Usato per caricare il DB locale dei volti salvati in precedenza.
+       */
       const raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) return { nextId: 0, faces: [] };
       const parsed = JSON.parse(raw);
@@ -108,6 +113,11 @@ function loadDb() {
 }
 
 function persistDb() {
+   /* [SYSTEM API: localStorage]
+    * Funzionamento: Scrittura persistente sincrona nel browser.
+    * Parametri: setItem(key, value)
+    * Feature: Usato per salvare il DB aggiornato con le nuove feature biometriche, serializzato in JSON.
+    */
    localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
    renderDbStats();
 }
@@ -609,6 +619,11 @@ function effectLoop(ts = 0) {
       lastEffectRun = ts;
       runEffectPass();
    }
+   /* [SYSTEM API: requestAnimationFrame]
+    * Funzionamento: Richiede al browser di chiamare una funzione prima del prossimo repaint.
+    * Parametri: callback(timestamp)
+    * Feature: Crea un loop di rendering efficiente per le maschere AR, limitando i calcoli superflui e sincronizzandosi col display.
+    */
    effectLoopHandle = requestAnimationFrame(effectLoop);
 }
 
@@ -618,6 +633,11 @@ function startEffectLoop() {
 }
 
 function stopEffectLoop() {
+   /* [SYSTEM API: cancelAnimationFrame]
+    * Funzionamento: Annulla una richiesta di animazione precedentemente schedulata.
+    * Parametri: handle (ID numerico restituito da rAF)
+    * Feature: Blocca il loop di rendering AR quando disattiviamo gli effetti.
+    */
    if (effectLoopHandle) cancelAnimationFrame(effectLoopHandle);
    effectLoopHandle = null;
    effectInferenceInFlight = false;
@@ -738,6 +758,11 @@ async function findFace() {
 }
 
 async function startCamera() {
+   /* [SYSTEM API: navigator.mediaDevices.getUserMedia]
+    * Funzionamento: Richiede all'utente il permesso di accedere alla webcam/microfono. Restituisce un MediaStream.
+    * Parametri: object { video: { constraints }, audio: boolean }
+    * Feature: Accediamo al feed video ad alta risoluzione, specificando il 'facingMode' (user/environment) per il selfie-mode.
+    */
    const stream = await navigator.mediaDevices.getUserMedia({
       video: {
          width: { ideal: 1920 },
@@ -906,9 +931,17 @@ async function init() {
 
          ctx.fillText(logText, exportCanvas.width / 2, exportCanvas.height - footerHeight / 2);
 
+         /* [SYSTEM API: HTMLCanvasElement.toBlob]
+          * Funzionamento: Esporta asincronamente il contenuto grafico del canvas in un Blob raw.
+          */
          exportCanvas.toBlob(blob => {
             const file = new File([blob], "ghostati-makeup.png", { type: "image/png" });
             const attemptShare = () => {
+               /* [SYSTEM API: navigator.share]
+                * Funzionamento: Invoca il menu di condivisione nativo dell'OS mobile/desktop (Web Share API).
+                * Parametri: object { title, text, files }
+                * Feature: Fallback essenziale su mobile dove clipboard.write(Image) è bloccato o difettoso per motivi di sicurezza/supporto.
+                */
                if (navigator.share) {
                   navigator.share({
                      title: 'Ghostati Makeup',
@@ -921,6 +954,11 @@ async function init() {
                }
             };
 
+            /* [SYSTEM API: navigator.clipboard.write]
+             * Funzionamento: API asincrona per scrivere dati arbitrari nella clipboard di sistema. Richiede contesto sicuro (HTTPS/localhost) e interazione utente.
+             * Parametri: array di ClipboardItem
+             * Feature: Usata per permettere all'utente di incollare l'immagine PNG esportata direttamente su Telegram/WhatsApp o software di editing.
+             */
             if (navigator.clipboard && navigator.clipboard.write) {
                try {
                   navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
