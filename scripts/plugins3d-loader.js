@@ -45,6 +45,10 @@
    const paramValues = new Map(); // id -> {paramName: currentValue}
    let active = null;
 
+   // Esposizione: l'engine (e altri add-on) possono sapere se c'è un plugin 3D attivo.
+   // Restituisce l'id corrente o null. Simmetrico a Ghostati.getActiveEffect (2D).
+   window.Ghostati.getActiveEffect3d = () => active;
+
    function syncSize() {
       if (canvas.width !== overlayEl.width || canvas.height !== overlayEl.height) {
          canvas.width = overlayEl.width;
@@ -241,6 +245,18 @@
       }
       activatePlugin(id, button);
    }
+
+   events.addEventListener('beforeEfficacyComposite', (e) => {
+      const detail = e.detail || {};
+      const tCanvas = detail.canvas;
+      const tCtx = detail.ctx;
+      if (!active || !tCanvas || !tCtx) return;
+      // Compositing: copia l'output corrente del plugin 3D dalla mesh3dOverlay
+      // sulla temp canvas. Entrambe hanno dimensioni native del video (post fix
+      // aspect ratio), quindi 1:1. Se il plugin non ha ancora disegnato per
+      // questo frame il canvas è vuoto → drawImage diventa un no-op visivo.
+      tCtx.drawImage(canvas, 0, 0, tCanvas.width, tCanvas.height);
+   });
 
    events.addEventListener('landmarks3d', (e) => {
       const landmarks = e.detail && e.detail.landmarks;
