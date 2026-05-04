@@ -423,7 +423,9 @@ window.Ghostati = {
    getActiveEffect: () => activeEffect,
    getLastResult: () => lastKnownEffectResult,
    getMatchThreshold: () => MATCH_THRESHOLD,
-   computeMatchState
+   computeMatchState,
+   compositeAndDetect: (liveResult) => compositeAndDetect(liveResult),
+   detectorOptions: DETECTOR_OPTIONS
 };
 
 const loadedGhostyles = new Map();
