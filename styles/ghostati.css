@@ -78,6 +78,7 @@ body {
 #video { z-index: 1; }
 #previewImage { z-index: 2; display: none; }
 #overlay { z-index: 3; pointer-events: none; }
+#bboxOverlay { z-index: 4; pointer-events: none; }
 
 #placeholder {
   z-index: 0;
