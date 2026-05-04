@@ -212,9 +212,17 @@ function setBusy(isBusy) {
 }
 
 function resizeCanvas() {
+   // Allinea le dimensioni intrinseche del canvas a quelle native del video.
+   // CSS object-fit: cover gestisce il crop visivo per coprire il contenitore,
+   // così le coordinate restituite da face-api/MediaPipe (in pixel del video)
+   // si proiettano 1:1 sul canvas, senza stretching su finestre con aspect
+   // ratio diverso da quello della webcam. Fallback al contenitore prima che
+   // il video abbia dimensioni note (boot pre-permessi camera).
    const rect = els.viewer.getBoundingClientRect();
-   els.overlay.width = Math.max(1, Math.floor(rect.width));
-   els.overlay.height = Math.max(1, Math.floor(rect.height));
+   const w = els.video.videoWidth || Math.max(1, Math.floor(rect.width));
+   const h = els.video.videoHeight || Math.max(1, Math.floor(rect.height));
+   els.overlay.width = w;
+   els.overlay.height = h;
 }
 
 function clearOverlay() {
