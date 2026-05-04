@@ -8,9 +8,18 @@
  * (canvas e loop di inferenza separati).
  *
  * Protocollo plugin (vedi ghostyles3d/wireframe.js):
- *   export function onInit() { ... }                    opzionale
- *   export function onDraw3D(ctx, landmarks, video) {}  obbligatoria
- *   export function onClear(ctx) { ... }                opzionale
+ *   export function onInit() { ... }                              opzionale
+ *   export function onDraw3D(ctx, landmarks, video, params) {}    obbligatoria
+ *   export function onClear(ctx) { ... }                          opzionale
+ *   export const params = [...]                                   opzionale
+ *
+ * Schema params (opt-in nel modulo del plugin):
+ *   [
+ *     { name, type: 'range',  label?, min, max, step?, default },
+ *     { name, type: 'bool',   label?, default },
+ *     { name, type: 'select', label?, options:[], default }
+ *   ]
+ * Se il plugin non dichiara `params`, il 4° arg di onDraw3D è {}.
  *
  * Eventi emessi:
  *   effectChanged3d  { active, previous }
@@ -20,8 +29,9 @@
    const canvas = document.getElementById('mesh3dOverlay');
    const overlayEl = document.getElementById('overlay');
    const container = document.getElementById('ghostyles3dContainer');
+   const panel = document.getElementById('plugin3dParamsPanel');
    const video = document.getElementById('video');
-   if (!canvas || !overlayEl || !container || !video) {
+   if (!canvas || !overlayEl || !container || !panel || !video) {
       console.warn('[plugins3d] elementi DOM mancanti, skip init');
       return;
    }
@@ -31,7 +41,8 @@
    }
    const ctx = canvas.getContext('2d');
    const events = Ghostati.events;
-   const loaded = new Map();   // id -> {id, name, module, url}
+   const loaded = new Map();      // id -> {id, name, module, url}
+   const paramValues = new Map(); // id -> {paramName: currentValue}
    let active = null;
 
    function syncSize() {
@@ -59,6 +70,7 @@
          const name = nameMatch ? nameMatch[1].trim() : (expectedName || id);
          const module = await import(url);
          loaded.set(id, { id, name, module, url });
+         initParamsFromModule(id, module);
          if (typeof module.onInit === 'function') {
             try { module.onInit(); }
             catch (e) { console.error(`[plugins3d] onInit di '${name}':`, e); }
@@ -69,6 +81,112 @@
          console.error('[plugins3d] errore caricamento:', err);
          Ghostati.log(`Impossibile caricare plugin 3D ${expectedName || id}: ${err.message}`, 'plugins3d');
       }
+   }
+
+   function initParamsFromModule(id, module) {
+      if (!Array.isArray(module.params) || module.params.length === 0) return;
+      const values = {};
+      for (const p of module.params) values[p.name] = p.default;
+      paramValues.set(id, values);
+   }
+
+   function syncPanelHeightVar() {
+      // Aggiorna --pp-h così la logbox sale di altrettanto via CSS calc()
+      const h = panel.classList.contains('visible') ? panel.offsetHeight + 12 : 0;
+      document.documentElement.style.setProperty('--pp-h', h + 'px');
+   }
+
+   function renderParamsPanel(id) {
+      panel.innerHTML = '';
+      const entry = loaded.get(id);
+      if (!entry || !Array.isArray(entry.module.params) || entry.module.params.length === 0) {
+         panel.classList.remove('visible');
+         panel.setAttribute('aria-hidden', 'true');
+         syncPanelHeightVar();
+         return;
+      }
+      const title = document.createElement('div');
+      title.className = 'pp-title';
+      title.textContent = `Parametri — ${entry.name}`;
+      panel.appendChild(title);
+      for (const p of entry.module.params) {
+         const row = createParamRow(id, p);
+         if (row) panel.appendChild(row);
+      }
+      panel.classList.add('visible');
+      panel.setAttribute('aria-hidden', 'false');
+      // L'altezza è disponibile dopo il reflow → richiedi un frame
+      requestAnimationFrame(syncPanelHeightVar);
+   }
+
+   function hideParamsPanel() {
+      panel.classList.remove('visible');
+      panel.setAttribute('aria-hidden', 'true');
+      panel.innerHTML = '';
+      syncPanelHeightVar();
+   }
+
+   function createParamRow(pluginId, p) {
+      const values = paramValues.get(pluginId);
+      if (!values) return null;
+      const row = document.createElement('div');
+      row.className = 'pp-row';
+
+      const label = document.createElement('label');
+      label.className = 'pp-label';
+      label.textContent = p.label || p.name;
+      row.appendChild(label);
+
+      const ctrlWrap = document.createElement('div');
+      ctrlWrap.className = 'pp-control';
+
+      if (p.type === 'range') {
+         const input = document.createElement('input');
+         input.type = 'range';
+         input.min = String(p.min);
+         input.max = String(p.max);
+         input.step = String(p.step || 0.01);
+         input.value = String(values[p.name]);
+         const valueLabel = document.createElement('span');
+         valueLabel.className = 'pp-value';
+         const fmt = (v) => (Number(p.step) >= 1 ? String(v) : Number(v).toFixed(2));
+         valueLabel.textContent = fmt(values[p.name]);
+         input.addEventListener('input', () => {
+            const v = parseFloat(input.value);
+            values[p.name] = v;
+            valueLabel.textContent = fmt(v);
+         });
+         ctrlWrap.appendChild(input);
+         row.appendChild(ctrlWrap);
+         row.appendChild(valueLabel);
+      } else if (p.type === 'bool') {
+         const input = document.createElement('input');
+         input.type = 'checkbox';
+         input.checked = Boolean(values[p.name]);
+         input.addEventListener('input', () => {
+            values[p.name] = input.checked;
+         });
+         ctrlWrap.appendChild(input);
+         row.appendChild(ctrlWrap);
+      } else if (p.type === 'select') {
+         const select = document.createElement('select');
+         for (const opt of (p.options || [])) {
+            const o = document.createElement('option');
+            o.value = String(opt);
+            o.textContent = String(opt);
+            if (opt === values[p.name]) o.selected = true;
+            select.appendChild(o);
+         }
+         select.addEventListener('input', () => {
+            values[p.name] = select.value;
+         });
+         ctrlWrap.appendChild(select);
+         row.appendChild(ctrlWrap);
+      } else {
+         console.warn(`[plugins3d] tipo param sconosciuto: ${p.type}`);
+         return null;
+      }
+      return row;
    }
 
    function renderButton(id, name) {
@@ -92,6 +210,7 @@
       container.querySelectorAll('.preview-btn').forEach(b =>
          b.classList.toggle('active', b === button)
       );
+      renderParamsPanel(id);
       events.dispatchEvent(new CustomEvent('effectChanged3d', {
          detail: { active, previous }
       }));
@@ -108,6 +227,7 @@
       active = null;
       container.querySelectorAll('.preview-btn').forEach(b => b.classList.remove('active'));
       clearCanvas();
+      hideParamsPanel();
       events.dispatchEvent(new CustomEvent('effectChanged3d', {
          detail: { active: null, previous }
       }));
@@ -132,7 +252,7 @@
       if (!entry || typeof entry.module.onDraw3D !== 'function') return;
       try {
          ctx.save();
-         entry.module.onDraw3D(ctx, landmarks, video);
+         entry.module.onDraw3D(ctx, landmarks, video, paramValues.get(active) || {});
          ctx.restore();
       } catch (err) {
          console.error(`[plugins3d] onDraw3D errore in ${entry.name}:`, err);
