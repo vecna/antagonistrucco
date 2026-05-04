@@ -174,10 +174,6 @@ body {
   transition: transform 200ms ease, opacity 200ms ease;
 }
 
-.ghost-topbar__toggle span + span {
-  margin-top: 0.25rem;
-}
-
 .ghost-topbar.is-open .ghost-topbar__toggle span:nth-child(1) {
   transform: translateY(0.37rem) rotate(45deg);
 }
@@ -190,7 +186,7 @@ body {
   transform: translateY(-0.37rem) rotate(-45deg);
 }
 
-@import url('https://fonts.googleapis.com/css2?family=League+Script&family=Outfit:wght@400;600;700;800&family=JetBrains+Mono:wght@400;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=League+Script&family=Outfit:weght@400;600;700;800;900&family=JetBrains+Mono:wght@400;700&display=swap');
 
 h1 {
   margin: 0 0 4px;
