@@ -7,11 +7,18 @@
  * plugin attivo. Convive con i Ghostyle 2D dell'engine senza interferire
  * (canvas e loop di inferenza separati).
  *
- * Protocollo plugin (vedi ghostyles3d/wireframe.js):
- *   export function onInit() { ... }                              opzionale
- *   export function onDraw3D(ctx, landmarks, video, params) {}    obbligatoria
- *   export function onClear(ctx) { ... }                          opzionale
+ * Protocollo plugin (vedi ghostyles3d/uv-stripes.js):
+ *   export function paintUV(ctx, params) { ... }                  obbligatoria
  *   export const params = [...]                                   opzionale
+ *   export const textureSize = 256                                opzionale (default 256)
+ *   export function onInit() { ... }                              opzionale, una volta al caricamento
+ *   export function onClear(ctx) { ... }                          opzionale, alla disattivazione
+ *
+ * Tutti i plugin 3D sono "UV-space": disegnano un pattern in coordinate UV
+ * canoniche su un canvas quadrato `textureSize × textureSize`. Il rendering
+ * (warp triangolo-per-triangolo, cache della texture, backface culling) è
+ * delegato a `Ghostati.UvRenderer.render(...)` (vedi
+ * scripts/ghostyle3d-uv-renderer.js).
  *
  * Schema params (opt-in nel modulo del plugin):
  *   [
@@ -19,7 +26,7 @@
  *     { name, type: 'bool',   label?, default },
  *     { name, type: 'select', label?, options:[], default }
  *   ]
- * Se il plugin non dichiara `params`, il 4° arg di onDraw3D è {}.
+ * Se il plugin non dichiara `params`, il 2° arg di paintUV è {}.
  *
  * Eventi emessi:
  *   effectChanged3d  { active, previous }
@@ -265,13 +272,15 @@
       clearCanvas();
       if (!active || !landmarks) return;
       const entry = loaded.get(active);
-      if (!entry || typeof entry.module.onDraw3D !== 'function') return;
+      if (!entry || typeof entry.module.paintUV !== 'function') return;
+      const renderer = window.Ghostati && window.Ghostati.UvRenderer;
+      if (!renderer || typeof renderer.render !== 'function') return;
       try {
          ctx.save();
-         entry.module.onDraw3D(ctx, landmarks, video, paramValues.get(active) || {});
+         renderer.render(entry.module, ctx, landmarks, paramValues.get(active) || {});
          ctx.restore();
       } catch (err) {
-         console.error(`[plugins3d] onDraw3D errore in ${entry.name}:`, err);
+         console.error(`[plugins3d] render errore in ${entry.name}:`, err);
       }
    });
 
