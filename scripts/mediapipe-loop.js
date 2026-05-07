@@ -16,8 +16,15 @@ const MODEL_URL = "https://storage.googleapis.com/mediapipe-models/face_landmark
 
 let faceLandmarker = null;
 let lastVideoTime = -1;
+let lastInferAt = 0;
 let video = null;
+let fpsSelect = null;
 let running = false;
+
+function getFrameDelayMs() {
+   const v = fpsSelect && parseInt(fpsSelect.value, 10);
+   return Number.isFinite(v) && v > 0 ? v : 120;
+}
 
 async function waitForVideoReady(v) {
    if (v.readyState >= 2) return;
@@ -37,6 +44,7 @@ async function init() {
       console.warn('[mediapipe-loop] #video non trovato, skip init');
       return;
    }
+   fpsSelect = document.getElementById('fpsSelect');
 
    try {
       const vision = await FilesetResolver.forVisionTasks(MEDIAPIPE_WASM);
@@ -71,9 +79,12 @@ function tick() {
    requestAnimationFrame(tick);
    if (!faceLandmarker || !video || video.readyState < 2) return;
    if (video.currentTime === lastVideoTime) return;
+   const now = performance.now();
+   if (now - lastInferAt < getFrameDelayMs()) return;
+   lastInferAt = now;
    lastVideoTime = video.currentTime;
    try {
-      const results = faceLandmarker.detectForVideo(video, performance.now());
+      const results = faceLandmarker.detectForVideo(video, now);
       const landmarks = (results.faceLandmarks && results.faceLandmarks[0]) || null;
       Ghostati.events.dispatchEvent(new CustomEvent('landmarks3d', {
          detail: { landmarks, results }
