@@ -24,7 +24,8 @@
  *   [
  *     { name, type: 'range',  label?, min, max, step?, default },
  *     { name, type: 'bool',   label?, default },
- *     { name, type: 'select', label?, options:[], default }
+ *     { name, type: 'select', label?, options:[], default },
+ *     { name, type: 'color',  label?, default: '#rrggbb' }   // valore al plugin: [r, g, b] interi 0..255
  *   ]
  * Se il plugin non dichiara `params`, il 2° arg di paintUV è {}.
  *
@@ -97,10 +98,72 @@
       }
    }
 
+   // Coerce param value to schema constraints. Garantisce che il plugin
+   // riceva sempre valori validi (range clampato + step intero arrotondato,
+   // bool come boolean, select limitato alle options).
+   function coerceParam(p, value) {
+      if (p.type === 'range') {
+         let v = (typeof value === 'number') ? value : parseFloat(value);
+         if (!Number.isFinite(v)) v = p.default;
+         const step = (typeof p.step === 'number') ? p.step : 0.01;
+         if (Number.isInteger(step) && step >= 1) v = Math.round(v);
+         if (typeof p.min === 'number') v = Math.max(p.min, v);
+         if (typeof p.max === 'number') v = Math.min(p.max, v);
+         return v;
+      }
+      if (p.type === 'bool') return Boolean(value);
+      if (p.type === 'select') {
+         const opts = Array.isArray(p.options) ? p.options : [];
+         return opts.includes(value) ? value : p.default;
+      }
+      if (p.type === 'color') {
+         // Restituisce sempre [r, g, b] interi 0..255. Accetta in input:
+         //   - string '#rrggbb' o '#rgb' → parse
+         //   - array [r, g, b] → clamp + round
+         // Tutto il resto cade sul default (a sua volta coerciato).
+         if (Array.isArray(value) && value.length === 3) {
+            return value.map(c => {
+               const n = Math.round(Number(c));
+               return Math.max(0, Math.min(255, Number.isFinite(n) ? n : 0));
+            });
+         }
+         if (typeof value === 'string') {
+            const short = /^#([0-9a-fA-F]{3})$/.exec(value);
+            if (short) {
+               const c = short[1];
+               return [
+                  parseInt(c[0] + c[0], 16),
+                  parseInt(c[1] + c[1], 16),
+                  parseInt(c[2] + c[2], 16)
+               ];
+            }
+            if (/^#[0-9a-fA-F]{6}$/.test(value)) {
+               return [
+                  parseInt(value.slice(1, 3), 16),
+                  parseInt(value.slice(3, 5), 16),
+                  parseInt(value.slice(5, 7), 16)
+               ];
+            }
+         }
+         // Default ricoerciato (di solito '#rrggbb' nello schema).
+         return value === p.default ? [0, 0, 0] : coerceParam(p, p.default);
+      }
+      return value;
+   }
+
+   function rgbToHex(rgb) {
+      if (!Array.isArray(rgb) || rgb.length < 3) return '#000000';
+      return '#' + rgb.slice(0, 3).map(c => {
+         const n = Math.max(0, Math.min(255, Math.round(Number(c) || 0)));
+         return n.toString(16).padStart(2, '0');
+      }).join('');
+   }
+
    // initParamsFromModule: setta i valori correnti per il plugin. Se
    // `preserveValues` è passato (snapshot da prima del reload), ripristina i
    // valori per i param che esistono ancora con lo stesso nome — i nuovi
-   // ottengono il default, i rimossi vengono scartati.
+   // ottengono il default, i rimossi vengono scartati. Tutti i valori finali
+   // passano da `coerceParam` per uniformità con lo schema.
    function initParamsFromModule(id, module, preserveValues) {
       if (!Array.isArray(module.params) || module.params.length === 0) {
          paramValues.delete(id);
@@ -108,9 +171,10 @@
       }
       const values = {};
       for (const p of module.params) {
-         values[p.name] = (preserveValues && p.name in preserveValues)
+         const raw = (preserveValues && p.name in preserveValues)
             ? preserveValues[p.name]
             : p.default;
+         values[p.name] = coerceParam(p, raw);
       }
       paramValues.set(id, values);
    }
@@ -177,7 +241,7 @@
          const fmt = (v) => (Number(p.step) >= 1 ? String(v) : Number(v).toFixed(2));
          valueLabel.textContent = fmt(values[p.name]);
          input.addEventListener('input', () => {
-            const v = parseFloat(input.value);
+            const v = coerceParam(p, input.value);
             values[p.name] = v;
             valueLabel.textContent = fmt(v);
          });
@@ -189,7 +253,7 @@
          input.type = 'checkbox';
          input.checked = Boolean(values[p.name]);
          input.addEventListener('input', () => {
-            values[p.name] = input.checked;
+            values[p.name] = coerceParam(p, input.checked);
          });
          ctrlWrap.appendChild(input);
          row.appendChild(ctrlWrap);
@@ -203,10 +267,24 @@
             select.appendChild(o);
          }
          select.addEventListener('input', () => {
-            values[p.name] = select.value;
+            values[p.name] = coerceParam(p, select.value);
          });
          ctrlWrap.appendChild(select);
          row.appendChild(ctrlWrap);
+      } else if (p.type === 'color') {
+         const input = document.createElement('input');
+         input.type = 'color';
+         input.value = rgbToHex(values[p.name]);
+         const valueLabel = document.createElement('span');
+         valueLabel.className = 'pp-value';
+         valueLabel.textContent = rgbToHex(values[p.name]);
+         input.addEventListener('input', () => {
+            values[p.name] = coerceParam(p, input.value);
+            valueLabel.textContent = rgbToHex(values[p.name]);
+         });
+         ctrlWrap.appendChild(input);
+         row.appendChild(ctrlWrap);
+         row.appendChild(valueLabel);
       } else {
          console.warn(`[plugins3d] tipo param sconosciuto: ${p.type}`);
          return null;

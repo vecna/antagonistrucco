@@ -334,6 +334,24 @@
       return parts.join('|');
    }
 
+   // Proxy che warna in console quando il plugin legge una chiave di params
+   // non dichiarata nello schema. Aiuta a smascherare typo (es. `min_pahse`).
+   // Una sola warning per chiave per non spammare.
+   function makeParamsProxy(module, values) {
+      if (!Array.isArray(module.params)) return values;
+      const declared = new Set(module.params.map(p => p.name));
+      const warned = new Set();
+      return new Proxy(values, {
+         get(target, key) {
+            if (typeof key === 'string' && !declared.has(key) && !warned.has(key)) {
+               warned.add(key);
+               console.warn(`[uv-renderer] plugin legge param non dichiarato: '${key}'`);
+            }
+            return target[key];
+         }
+      });
+   }
+
    function ensureTexture(module, params) {
       const size = (typeof module.textureSize === 'number' && module.textureSize > 0)
          ? Math.round(module.textureSize)
@@ -355,7 +373,8 @@
          entry.ctx.clearRect(0, 0, size, size);
          try {
             const helpers = buildHelpers(size);
-            module.paintUV(entry.ctx, params, helpers);
+            const safeParams = makeParamsProxy(module, params);
+            module.paintUV(entry.ctx, safeParams, helpers);
          } catch (err) {
             console.error('[uv-renderer] paintUV errore:', err);
          }
